@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: fbchatomc
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn server:app
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.6
+      - key: DEEPSEEK_API_KEY
+        sync: false
