@@ -493,17 +493,19 @@ class ChatBot:
         # إضافة اسم المستخدم إلى الرد إذا كان متوفرًا
         user_name = self._get_user_name(user_id)
         if user_name and random.random() < 0.7:  # 70% فرصة لاستخدام اسم المستخدم
-            # البحث عن نقاط مناسبة لإضافة اسم المستخدم
-            if "." in formatted_response:
-                # استبدال أول نقطة بنقطة متبوعة باسم المستخدم
-                formatted_response = formatted_response.replace(".", f". يا {user_name},", 1)
-            elif "\n" in formatted_response:
-                # إضافة اسم المستخدم بعد السطر الأول
-                lines = formatted_response.split("\n", 1)
-                formatted_response = f"{lines[0]} يا {user_name}\n{lines[1]}"
+            # إضافة اسم المستخدم بطريقة طبيعية في بداية الرد
+            first_sentence_end = self._find_first_sentence_end(formatted_response)
+            if first_sentence_end > 0:
+                formatted_response = formatted_response[:first_sentence_end] + f" يا {user_name}!" + formatted_response[first_sentence_end:]
             else:
                 # إضافة اسم المستخدم في بداية الرد
-                formatted_response = f"يا {user_name}, {formatted_response}"
+                formatted_response = f"أهلاً يا {user_name}! \n\n{formatted_response}"
+        
+        # تحسين التنسيق بإضافة الرموز والأنماط
+        formatted_response = self._enhance_formatting(formatted_response)
+        
+        # إضافة روابط التسجيل المناسبة حسب سياق المحادثة
+        formatted_response = self._add_relevant_links(formatted_response, user_message)
         
         # محاولة تحديد فئة المستخدم وتخصيص الرد
         if user_message:
@@ -525,22 +527,190 @@ class ChatBot:
             if assurance:
                 formatted_response = f"{formatted_response}\n\n{assurance}"
         
-        # إضافة خاتمة أحياناً
-        if not self.continue_conversation and random.random() < 0.5:  # 50% فرصة لإضافة خاتمة إذا لم يكن هناك سؤال للاستمرار
-            conclusion = self._get_random_expression("conclusions")
-            if conclusion:
-                formatted_response = f"{formatted_response}\n\n{conclusion}"
+        # إضافة خاتمة مخصصة تتضمن سؤال محدد
+        if not self.continue_conversation or random.random() < 0.5:
+            conclusion = self._generate_contextual_question(user_message, user_category)
+            formatted_response = f"{formatted_response}\n\n{conclusion}"
         
-        # إضافة سؤال الاستمرار إذا كانت الميزة مفعلة
-        if self.continue_conversation:
-            continue_phrase = random.choice(self.continue_phrases)
-            formatted_response = f"{formatted_response}\n\n{continue_phrase}"
-        
-        # إضافة اسم الشات بوت للتوقيع أحياناً
+        # إضافة اسم الشات بوت للتوقيع في بعض الحالات
         if random.random() < 0.2:  # 20% فرصة لإضافة توقيع
             formatted_response = f"{formatted_response}\n\nمع تحيات {self.bot_name} - المساعد الرسمي لمجمع عمال مصر"
         
         return formatted_response
+    
+    def _find_first_sentence_end(self, text: str) -> int:
+        """
+        تحديد نهاية الجملة الأولى في النص
+        
+        :param text: النص المراد فحصه
+        :return: موقع نهاية الجملة الأولى، أو -1 إذا لم يتم العثور على نهاية
+        """
+        sentence_end_markers = ['. ', '! ', '؟ ', '، ', ': ', '\n']
+        positions = []
+        
+        for marker in sentence_end_markers:
+            pos = text.find(marker)
+            if pos >= 0:
+                positions.append(pos + len(marker) - 1)
+        
+        return min(positions) if positions else -1
+    
+    def _enhance_formatting(self, text: str) -> str:
+        """
+        تحسين تنسيق النص بإضافة رموز وتنسيقات
+        
+        :param text: النص المراد تحسينه
+        :return: النص بعد التنسيق
+        """
+        # تنسيق العناوين
+        text = re.sub(r'(^|\n)([^:\n]+):(\s*\n)', r'\1### \2: ###\3', text)
+        
+        # إضافة رموز للنقاط
+        text = re.sub(r'(\n|^)(\d+)[.)] ', r'\1\2️⃣ ', text)
+        
+        # إضافة رموز للمزايا والخدمات
+        text = re.sub(r'(\n|^)[-*] ', r'\1✅ ', text)
+        
+        # تمييز الكلمات المهمة
+        important_words = [
+            "مجمع عمال مصر", "خدمات", "استثمار", "فرص عمل", "تسجيل", 
+            "مشروع", "دراسة جدوى", "توظيف", "شراكة", "عائد"
+        ]
+        
+        for word in important_words:
+            if word in text:
+                text = text.replace(word, f"*{word}*")
+        
+        # إضافة رموز للمعلومات
+        contact_patterns = [
+            (r'تليفون: (\d+)', r'📞 *تليفون*: \1'),
+            (r'واتساب: (\d+)', r'📱 *واتساب*: \1'),
+            (r'ايميل: ([^\s]+@[^\s]+)', r'✉️ *إيميل*: \1'),
+            (r'بريد الكتروني: ([^\s]+@[^\s]+)', r'✉️ *بريد إلكتروني*: \1'),
+            (r'موقعنا: ([^\s]+)', r'🌐 *موقعنا*: \1'),
+            (r'العنوان: ([^\n]+)', r'📍 *العنوان*: \1')
+        ]
+        
+        for pattern, replacement in contact_patterns:
+            text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+        
+        return text
+    
+    def _add_relevant_links(self, text: str, user_message: str) -> str:
+        """
+        إضافة روابط مباشرة ذات صلة بسياق المحادثة
+        
+        :param text: النص الأصلي
+        :param user_message: رسالة المستخدم
+        :return: النص مع إضافة الروابط
+        """
+        # تحديد الكلمات المفتاحية في رسالة المستخدم
+        message_lower = user_message.lower()
+        
+        # روابط للتوظيف
+        job_keywords = ["وظيفة", "شغل", "عمل", "تسجيل", "توظيف", "سيرة ذاتية", "تقديم"]
+        
+        # روابط للاستثمار
+        investor_keywords = ["استثمار", "شراكة", "مشروع", "فرصة", "عائد", "دراسة جدوى"]
+        
+        # روابط للعمال والموارد البشرية
+        worker_keywords = ["عمال", "موظفين", "توفير", "تشغيل", "عمالة", "فنيين"]
+        
+        # فحص نوع الروابط التي يجب إضافتها
+        links_to_add = []
+        
+        if any(keyword in message_lower for keyword in job_keywords):
+            links_to_add.append({
+                "title": "رابط التسجيل للوظائف",
+                "url": "https://omalmisrservices.com/en/jobs",
+                "description": "سجل الآن مباشرة للتقدم للوظائف المتاحة"
+            })
+        
+        if any(keyword in message_lower for keyword in investor_keywords):
+            links_to_add.append({
+                "title": "خدمات المستثمرين",
+                "url": "https://omalmisrservices.com/en/companies",
+                "description": "تعرف على الفرص الاستثمارية وخدمات الشركات"
+            })
+        
+        if any(keyword in message_lower for keyword in worker_keywords):
+            links_to_add.append({
+                "title": "توفير العمالة",
+                "url": "https://omalmisrservices.com/en/workers",
+                "description": "ابحث عن العمالة المدربة لمشروعك"
+            })
+        
+        # إضافة الروابط إذا كانت مناسبة
+        if links_to_add:
+            text += "\n\n### روابط سريعة قد تهمك: ###\n"
+            for link in links_to_add:
+                text += f"🔗 [{link['title']}]({link['url']}) - {link['description']}\n"
+        
+        # إضافة معلومات التواصل إذا لم تكن موجودة
+        if "تليفون" not in text and "واتساب" not in text:
+            contact_info = "\n\n### للتواصل المباشر: ###\n"
+            contact_info += "📞 *تليفون/واتساب*: 01100901200\n"
+            contact_info += "✉️ *بريد إلكتروني*: info@omalmisr.com\n"
+            contact_info += "🌐 *الموقع الرسمي*: [www.omalmisr.com](https://www.omalmisr.com)\n"
+            text += contact_info
+        
+        return text
+    
+    def _generate_contextual_question(self, user_message: str, user_category: str = "") -> str:
+        """
+        توليد سؤال سياقي مناسب للمحادثة بدلاً من الأسئلة العامة
+        
+        :param user_message: رسالة المستخدم
+        :param user_category: فئة المستخدم
+        :return: سؤال مخصص
+        """
+        message_lower = user_message.lower()
+        
+        # أسئلة للباحثين عن وظائف
+        job_questions = [
+            "هل تبحث عن وظيفة في مجال معين؟",
+            "هل ترغب في معرفة الوظائف المتاحة حالياً؟",
+            "هل لديك خبرة سابقة في العمل؟",
+            "هل تريد مساعدة في تجهيز السيرة الذاتية؟",
+            "هل تريد معرفة المزيد عن شروط التوظيف؟"
+        ]
+        
+        # أسئلة للمستثمرين
+        investor_questions = [
+            "هل تبحث عن فرصة استثمارية محددة؟",
+            "هل ترغب في معرفة العائد المتوقع للاستثمار؟",
+            "هل تريد الاطلاع على دراسات الجدوى المتاحة؟",
+            "هل ترغب في تحديد موعد للقاء فريق الاستثمار؟",
+            "هل لديك مشروع قائم تريد تطويره؟"
+        ]
+        
+        # أسئلة للشركات
+        company_questions = [
+            "هل تبحث عن عمالة مدربة؟",
+            "هل تريد معرفة خدمات دعم الشركات التي نقدمها؟",
+            "هل ترغب في شراكة استراتيجية مع المجمع؟",
+            "هل لديك استفسار عن الخدمات القانونية؟",
+            "هل تريد معرفة المزيد عن خدمات توفير المواد الخام؟"
+        ]
+        
+        # أسئلة عامة
+        general_questions = [
+            "هل لديك استفسار آخر؟",
+            "هل تريد معرفة المزيد عن خدماتنا؟",
+            "هل هناك معلومات أخرى تحتاجها؟",
+            "هل تريد معرفة عناوين فروعنا؟",
+            "هل ترغب في التواصل المباشر مع أحد ممثلي خدمة العملاء؟"
+        ]
+        
+        # اختيار السؤال المناسب
+        if user_category == "باحث عن عمل" or any(keyword in message_lower for keyword in ["وظيفة", "شغل", "عمل", "توظيف"]):
+            return random.choice(job_questions)
+        elif user_category == "مستثمر" or any(keyword in message_lower for keyword in ["استثمار", "مشروع", "فرصة"]):
+            return random.choice(investor_questions)
+        elif user_category == "شركة" or any(keyword in message_lower for keyword in ["شركة", "مصنع", "عمال"]):
+            return random.choice(company_questions)
+        else:
+            return random.choice(general_questions)
     
     def generate_response(self, user_message: str, user_id: str = "") -> str:
         """
