@@ -491,60 +491,397 @@ class ChatBot:
         # لم يتم العثور على طلب قائمة
         return None
 
-    def _detect_user_category(self, message: str) -> str:
+    def generate_messenger_response(self, user_id: str, message: str) -> str:
         """
-        محاولة تحديد فئة المستخدم من رسالته
+        توليد رد للمستخدم عبر ماسنجر فيسبوك
         
+        :param user_id: معرف المستخدم
         :param message: رسالة المستخدم
-        :return: فئة المستخدم المحتملة
+        :return: الرد المولد
         """
-        message = message.lower()
+        self.set_conversation_source("messenger")
         
-        # كلمات مفتاحية للباحثين عن عمل
-        job_seekers_keywords = [
-            "وظيفة", "عمل", "توظيف", "شغل", "مرتب", "راتب", "تقديم", "سيرة ذاتية", 
-            "خبرة", "خريج", "تدريب", "تعيين", "مؤهل", "cv", "فرصة"
+        # التحقق مما إذا كان المستخدم يطلب التحدث مع ممثل خدمة العملاء
+        for keyword in self.customer_service_keywords:
+            if keyword in message.lower():
+                return self._generate_human_representative_response(user_id)
+        
+        # التحقق من طلبات القائمة
+        menu_response = self.process_menu_request(message)
+        if menu_response:
+            logger.info(f"تم إرسال قائمة للمستخدم {user_id}")
+            return menu_response
+        
+        # بناء المحادثة السابقة للمستخدم
+        conversation_history = self._get_user_conversation_history(user_id)
+        
+        # إنشاء سياق المحادثة
+        context = self._build_conversation_context(user_id, conversation_history)
+        
+        # توليد رد باستخدام DeepSeek API
+        try:
+            response = self.api.generate_response(message, context=context)
+            
+            # تنقية الرد من أي إشارات للذكاء الاصطناعي
+            response = self._filter_ai_references(response)
+            
+            # إضافة عبارة استمرارية للمحادثة إذا كانت مفعلة
+            if self.continue_conversation and random.random() < 0.7:  # 70% من الوقت
+                response += f"\n\n{random.choice(self.continue_phrases)}"
+            
+            # تخزين المحادثة
+            self._save_conversation(user_id, message, response)
+            
+            return response
+            
+        except Exception as e:
+            error_msg = f"حدث خطأ أثناء توليد الرد: {str(e)}"
+            logger.error(error_msg)
+            
+            # استخدام رد احتياطي
+            fallback_response = """
+أهلاً وسهلاً!
+
+للأسف، هناك مشكلة في الاتصال بنظام الذكاء الاصطناعي. يمكنك التواصل معنا مباشرة على رقم الهاتف: 01012345678 أو عبر البريد الإلكتروني: info@omalmisrservices.com وسيقوم فريقنا بالرد على استفسارك في أقرب وقت.
+
+سنتأكد من حل استفسارك بأسرع وقت!
+
+هل ترغب في معرفة المزيد؟
+            """
+            return fallback_response
+    
+    def generate_comment_response(self, comment_id: str, comment_text: str, user_id: str = None) -> str:
+        """
+        توليد رد لتعليق على منشور فيسبوك
+        
+        :param comment_id: معرف التعليق
+        :param comment_text: نص التعليق
+        :param user_id: معرف المستخدم (اختياري)
+        :return: الرد المولد
+        """
+        self.set_conversation_source("facebook_comment")
+        
+        # تحقق من نص التعليق للتأكد من أنه ليس ثناءً فقط
+        praise_expressions = [
+            "شكرا", "جزاكم الله خيرا", "ما شاء الله", "رائع", "تمام", "جميل", "احسنتم", 
+            "تسلم", "بارك الله فيكم", "جزاكم الله", "thank", "thanks", "❤"
         ]
         
-        # كلمات مفتاحية للمستثمرين
-        investors_keywords = [
-            "استثمار", "مشروع", "تمويل", "شراكة", "رأس مال", "ربح", "عائد", "فرصة استثمارية",
-            "تعاون", "رجل أعمال", "مستثمر", "مشروع"
+        # فحص إذا كان التعليق مجرد ثناء ولا يحتاج إلى رد
+        if len(comment_text.strip().split()) <= 3:  # تعليق قصير جداً
+            is_praise_only = False
+            for expr in praise_expressions:
+                if expr in comment_text.lower():
+                    is_praise_only = True
+                    break
+                    
+            if is_praise_only:
+                logger.info(f"تم تجاهل تعليق ثناء قصير: {comment_text}")
+                return "IGNORE_PRAISE_COMMENT"
+        
+        # التحقق من طلبات القائمة
+        menu_response = self.process_menu_request(comment_text)
+        if menu_response:
+            logger.info(f"تم إرسال قائمة لتعليق {comment_id}")
+            return menu_response
+        
+        # إنشاء سياق محادثة محدود لتعليقات الفيسبوك
+        context = f"""أنت 'محمد سلامة'، المساعد الرسمي لمجمع عمال مصر. تقوم بالرد على تعليقات الفيسبوك بأسلوب ودود واحترافي.
+مهمتك هي فهم استفسار العميل وتوجيهه للخدمة المناسبة من خدمات مجمع عمال مصر.
+
+معلومات مهمة:
+- لا تذكر أبداً أنك ذكاء اصطناعي، بل اظهر نفسك كممثل خدمة عملاء محترف.
+- كن مختصراً في ردودك على التعليقات (2-4 أسطر بحد أقصى).
+- قدم رابط صفحة الخدمة المناسبة عند الرد.
+- شجع المستخدم على طلب المزيد من المعلومات في نهاية الرد.
+- تعامل بأسلوب رسمي لكن ودود مع المستفسرين.
+
+استفسار المستخدم في تعليق على فيسبوك: {comment_text}
+"""
+        
+        # توليد رد باستخدام DeepSeek API
+        try:
+            response = self.api.generate_response(comment_text, context=context)
+            
+            # تنقية الرد من أي إشارات للذكاء الاصطناعي
+            response = self._filter_ai_references(response)
+            
+            # اختصار الرد للتعليقات حتى لا يكون طويلاً
+            if len(response.split()) > 80:  # إذا كان الرد طويلاً جداً
+                # محاولة تقصير الرد مع الحفاظ على الروابط والمعلومات المهمة
+                lines = response.split("\n")
+                shortened_response = []
+                link_found = False
+                
+                for line in lines:
+                    if "http" in line and not link_found:
+                        shortened_response.append(line)
+                        link_found = True
+                    elif len(shortened_response) < 4 and len(line.strip()) > 0:
+                        shortened_response.append(line)
+                
+                # إضافة عبارة تشجيع في النهاية
+                shortened_response.append("\nهل لديك أسئلة أخرى؟")
+                response = "\n".join(shortened_response)
+            
+            logger.info(f"تم توليد رد لتعليق {comment_id}: {response[:50]}...")
+            return response
+            
+        except Exception as e:
+            error_msg = f"حدث خطأ أثناء توليد الرد لتعليق {comment_id}: {str(e)}"
+            logger.error(error_msg)
+            
+            # استخدام رد احتياطي
+            with open('facebook_responses.json', 'r', encoding='utf-8') as f:
+                fallback_responses = json.load(f)
+            
+            default_response = """
+أهلاً وسهلاً!
+
+للأسف، هناك مشكلة في الاتصال بنظام الذكاء الاصطناعي. يمكنك التواصل معنا مباشرة على رقم الهاتف: 01012345678 أو عبر البريد الإلكتروني: info@omalmisrservices.com وسيقوم فريقنا بالرد على استفسارك في أقرب وقت.
+
+سنتأكد من حل استفسارك بأسرع وقت!
+
+هل ترغب في معرفة المزيد؟
+            """
+            
+            # البحث عن رد احتياطي مناسب
+            for response in fallback_responses:
+                if response.get("comment_id") == "comment4":  # رد الخطأ الافتراضي
+                    return response.get("response", default_response)
+            
+            return default_response
+    
+    def _filter_ai_references(self, text: str) -> str:
+        """
+        تنقية النص من أي إشارات للذكاء الاصطناعي
+        
+        :param text: النص المراد تنقيته
+        :return: النص بعد التنقية
+        """
+        ai_references = [
+            "كنموذج للذكاء الاصطناعي", "كذكاء اصطناعي", "كمساعد ذكاء اصطناعي",
+            "نموذج لغوي", "نموذج لغة كبير", "ذكاء اصطناعي", "deepseek", "deep seek",
+            "ai assistant", "ai model", "language model", "gpt", "llm", "ذكاء الاصطناعي",
+            "artificial intelligence", "ai", "تم تطويري", "as an ai", "كمساعد افتراضي"
         ]
         
-        # كلمات مفتاحية للصحفيين
-        media_keywords = [
-            "صحفي", "إعلام", "مقابلة", "تصريح", "خبر", "تقرير", "مجلة", "جريدة", "تلفزيون", 
-            "راديو", "إذاعة", "تغطية", "صحافة", "نشر", "مقال"
+        # استبدال الإشارات بتعبيرات بديلة
+        replacements = {
+            "كنموذج للذكاء الاصطناعي": "كمساعد لخدمة العملاء",
+            "كذكاء اصطناعي": "كمساعد لخدمة العملاء",
+            "كمساعد ذكاء اصطناعي": "كمساعد لخدمة العملاء",
+            "نموذج لغوي": "مساعد خدمة العملاء",
+            "نموذج لغة كبير": "مساعد خدمة العملاء",
+            "ذكاء اصطناعي": "مساعد خدمة العملاء",
+            "deepseek": "مجمع عمال مصر",
+            "deep seek": "مجمع عمال مصر",
+            "ai assistant": "مساعد خدمة العملاء",
+            "ai model": "مساعد خدمة العملاء",
+            "language model": "مساعد خدمة العملاء",
+            "gpt": "مساعد خدمة العملاء",
+            "llm": "مساعد خدمة العملاء",
+            "ذكاء الاصطناعي": "فريق خدمة العملاء",
+            "artificial intelligence": "فريق خدمة العملاء",
+            "ai": "مساعد",
+            "تم تطويري": "تم تدريبي",
+            "as an ai": "كمساعد لخدمة العملاء",
+            "كمساعد افتراضي": "كمساعد لخدمة العملاء"
+        }
+        
+        filtered_text = text
+        for ref, replacement in replacements.items():
+            filtered_text = re.sub(re.escape(ref), replacement, filtered_text, flags=re.IGNORECASE)
+        
+        # تنقية العبارات التي تبدأ بـ "أنا مساعد" أو "أنا لست"
+        statements_to_remove = [
+            r"أنا مساعد ذكاء اصطناعي.*?\.",
+            r"أنا لست إنسانًا حقيقيًا.*?\.",
+            r"I'm an AI.*?\.",
+            r"I am an AI.*?\.",
+            r"As an AI.*?\.",
+            r"كنموذج ذكاء اصطناعي.*?\.",
         ]
         
-        # كلمات مفتاحية للشركات والجهات
-        companies_keywords = [
-            "شركة", "مؤسسة", "جهة", "مصنع", "تعاون", "شراكة", "تفاهم", "بروتوكول", 
-            "اتفاقية", "مذكرة", "تنسيق", "جامعة", "معهد", "مدرسة"
-        ]
+        for statement in statements_to_remove:
+            filtered_text = re.sub(statement, "", filtered_text, flags=re.IGNORECASE | re.DOTALL)
         
-        # البحث عن الكلمات المفتاحية في الرسالة
-        for keyword in job_seekers_keywords:
-            if keyword in message:
-                logger.debug(f"تم تصنيف المستخدم كـ 'باحث عن عمل' بناءً على الكلمة المفتاحية: {keyword}")
-                return "باحث عن عمل"
+        return filtered_text.strip()
+    
+    def _build_conversation_context(self, user_id: str, conversation_history: List[Dict[str, str]]) -> str:
+        """
+        بناء سياق المحادثة للمستخدم
         
-        for keyword in investors_keywords:
-            if keyword in message:
-                logger.debug(f"تم تصنيف المستخدم كـ 'مستثمر' بناءً على الكلمة المفتاحية: {keyword}")
-                return "مستثمر"
+        :param user_id: معرف المستخدم
+        :param conversation_history: تاريخ المحادثة مع المستخدم
+        :return: نص السياق المبني
+        """
+        # الاسم المستعار للمستخدم إذا كان موجوداً في حالة المحادثة
+        user_name = self.conversation_state.get(user_id, {}).get('user_name', 'عزيزي الزائر')
         
-        for keyword in media_keywords:
-            if keyword in message:
-                logger.debug(f"تم تصنيف المستخدم كـ 'صحفي' بناءً على الكلمة المفتاحية: {keyword}")
-                return "صحفي"
+        # بناء سياق المحادثة
+        context = f"""أنت 'محمد سلامة'، المساعد الرسمي لمجمع عمال مصر. تتحدث مع {user_name} على ماسنجر فيسبوك.
+مهمتك هي فهم احتياجات العميل وتوجيهه للخدمة المناسبة من خدمات مجمع عمال مصر.
+
+معلومات مهمة:
+- لا تذكر أبداً أنك ذكاء اصطناعي، بل اظهر نفسك كممثل خدمة عملاء محترف.
+- كن ودوداً ومهنياً في ردودك.
+- شجع المستخدم على طلب المزيد من المعلومات عند الاقتضاء.
+- تجنب الكتابة بطريقة رسمية جداً، اكتب بشكل طبيعي مثل شخص حقيقي.
+- تأكد من إعطاء رابط الخدمة المناسبة عند الإجابة.
+- لا تستخدم مصطلحات أجنبية إذا كانت لها بديل عربي شائع.
+
+الخدمات الرئيسية لمجمع عمال مصر:
+1. بوابة التوظيف للباحثين عن عمل: https://omalmisrservices.com/ar/jobs
+2. بوابة توفير الموظفين للشركات: https://omalmisrservices.com/ar/workers
+3. خدمات الشركات والمستثمرين: https://omalmisrservices.com/ar/companies
+4. بوابة فض وتسوية المنازعات: https://omalmisrservices.com/ar/dispute
+
+"""
         
-        for keyword in companies_keywords:
-            if keyword in message:
-                logger.debug(f"تم تصنيف المستخدم كـ 'شركة' بناءً على الكلمة المفتاحية: {keyword}")
-                return "شركة"
+        # إضافة تاريخ المحادثة إذا كان موجوداً
+        if conversation_history:
+            context += "\nتاريخ المحادثة السابق:\n"
+            for i, exchange in enumerate(conversation_history[-5:]):  # آخر 5 تبادلات فقط
+                context += f"المستخدم: {exchange.get('user_message', '')}\n"
+                context += f"محمد سلامة: {exchange.get('bot_response', '')}\n"
         
-        # إذا لم يتم تحديد الفئة، أعد فئة افتراضية
-        logger.debug("لم يتم تحديد فئة محددة للمستخدم")
-        return ""
+        return context
+    
+    def _get_user_conversation_history(self, user_id: str) -> List[Dict[str, str]]:
+        """
+        الحصول على تاريخ المحادثة لمستخدم معين
+        
+        :param user_id: معرف المستخدم
+        :return: قائمة بمحادثات المستخدم السابقة
+        """
+        return self.conversation_history.get(user_id, [])
+    
+    def _save_conversation(self, user_id: str, user_message: str, bot_response: str) -> None:
+        """
+        حفظ المحادثة في تاريخ المحادثات
+        
+        :param user_id: معرف المستخدم
+        :param user_message: رسالة المستخدم
+        :param bot_response: رد البوت
+        """
+        if user_id not in self.conversation_history:
+            self.conversation_history[user_id] = []
+        
+        # إضافة المحادثة الحالية إلى تاريخ المحادثات
+        self.conversation_history[user_id].append({
+            'timestamp': datetime.datetime.now().isoformat(),
+            'user_message': user_message,
+            'bot_response': bot_response,
+            'source': self.conversation_source
+        })
+        
+        # حفظ المحادثات في ملف إذا كان التخزين مفعل
+        if BOT_SETTINGS.get("SAVE_CONVERSATIONS", True):
+            self._save_conversation_to_file(user_id)
+    
+    def _save_conversation_to_file(self, user_id: str) -> None:
+        """
+        حفظ محادثة المستخدم في ملف JSON
+        
+        :param user_id: معرف المستخدم
+        """
+        if not BOT_SETTINGS.get("SAVE_CONVERSATIONS", True):
+            return
+        
+        try:
+            # إنشاء مجلد للمحادثات إذا لم يكن موجوداً
+            conversations_dir = BOT_SETTINGS.get("CONVERSATIONS_DIR", "conversations")
+            os.makedirs(conversations_dir, exist_ok=True)
+            
+            # اسم الملف يعتمد على مصدر المحادثة
+            filename_prefix = "messenger_" if self.conversation_source == "messenger" else "facebook_comment_"
+            current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # استخدام اختصار معرف المستخدم
+            user_id_short = user_id[-8:] if len(user_id) > 8 else user_id
+            
+            filename = f"{conversations_dir}/{filename_prefix}{user_id_short}_{current_time}.json"
+            
+            # تنسيق البيانات للحفظ
+            conversation_data = {
+                'user_id': user_id,
+                'source': self.conversation_source,
+                'timestamp': datetime.datetime.now().isoformat(),
+                'conversation': self.conversation_history[user_id]
+            }
+            
+            # يمكن إضافة بيانات إضافية لتعليقات الفيسبوك
+            if self.conversation_source == "facebook_comment":
+                conversation_data['platform'] = "facebook"
+                conversation_data['type'] = "comment"
+            
+            # حفظ البيانات في ملف JSON
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(conversation_data, f, ensure_ascii=False, indent=2)
+            
+            logger.debug(f"تم حفظ المحادثة في الملف: {filename}")
+            
+        except Exception as e:
+            logger.error(f"خطأ أثناء حفظ المحادثة للمستخدم {user_id}: {str(e)}")
+    
+    def _generate_human_representative_response(self, user_id: str) -> str:
+        """
+        توليد رد لطلب التواصل مع ممثل خدمة العملاء البشري
+        
+        :param user_id: معرف المستخدم
+        :return: رد بمعلومات الاتصال بممثل خدمة العملاء
+        """
+        # تكوين نص الرد
+        greeting = self._get_random_expression("greetings")
+        if not greeting:
+            greeting = "مرحباً بك!"
+        
+        user_name = self.conversation_state.get(user_id, {}).get('user_name', 'عزيزي العميل')
+        
+        response = f"{greeting} {user_name},\n\n"
+        response += "سيتم تحويلك للتواصل مع أحد ممثلي خدمة العملاء.\n\n"
+        
+        rep_name = self.human_rep_contact_info.get("name", "محمد سلامة")
+        rep_title = self.human_rep_contact_info.get("title", "مدير خدمة العملاء - مجمع عمال مصر")
+        
+        response += f"معلومات التواصل مع {rep_name}:\n"
+        
+        if "phone" in self.human_rep_contact_info:
+            response += f"📞 هاتف: {self.human_rep_contact_info['phone']}\n"
+        
+        if "email" in self.human_rep_contact_info:
+            response += f"📧 بريد إلكتروني: {self.human_rep_contact_info['email']}\n"
+        
+        if "whatsapp" in self.human_rep_contact_info:
+            response += f"📱 واتساب: {self.human_rep_contact_info['whatsapp']}\n"
+        
+        if "messenger" in self.human_rep_contact_info:
+            response += f"💬 ماسنجر: {self.human_rep_contact_info['messenger']}\n"
+        
+        response += f"\nسيقوم {rep_name} ({rep_title}) بالرد عليك في أقرب وقت ممكن، عادةً خلال ساعات العمل (9 صباحاً - 5 مساءً).\n\n"
+        response += "نشكرك على تواصلك مع مجمع عمال مصر."
+        
+        return response
+
+# تعريف دالة رئيسية لاختبار الشات بوت
+def test_chatbot():
+    """اختبار الشات بوت في وضع سطر الأوامر"""
+    chatbot = ChatBot()
+    print("مرحباً بك في شات بوت مجمع عمال مصر!")
+    print("اكتب 'خروج' للخروج من المحادثة.")
+    
+    user_id = f"test_user_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+    
+    while True:
+        user_input = input("\nأنت: ")
+        if user_input.lower() in ["خروج", "exit", "quit"]:
+            print("شكراً لاستخدامك شات بوت مجمع عمال مصر. إلى اللقاء!")
+            break
+        
+        response = chatbot.generate_messenger_response(user_id, user_input)
+        print(f"\n{chatbot.bot_name}: {response}")
+
+# تشغيل الاختبار عند تشغيل هذا الملف مباشرة
+if __name__ == "__main__":
+    test_chatbot()
