@@ -482,13 +482,16 @@ class ChatBot:
                 logger.info(f"استخدام API لتوليد إجابة للمستخدم {user_id}")
                 api_response = self.api.generate_response(user_message)
                 
+                # استخراج نص الرد من استجابة API
+                response_text = self.api.extract_response_text(api_response)
+                
                 # حفظ حالة المحادثة
                 if self.continue_conversation:
                     if user_id not in self.conversation_history:
                         self.conversation_history[user_id] = {}
                     self.conversation_history[user_id]["awaiting_continuation"] = True
                 
-                return self._format_response(api_response, user_message, user_id)
+                return self._format_response(response_text, user_message, user_id)
             except Exception as e:
                 logger.error(f"خطأ في توليد الإجابة باستخدام API: {e}")
                 
