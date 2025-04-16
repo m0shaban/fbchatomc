@@ -11,7 +11,8 @@ import random
 import datetime
 import subprocess
 import logging
-from typing import Dict, Any, Optional
+import re
+from typing import Dict, Any, Optional, Tuple
 
 from bot import ChatBot
 from config import BOT_SETTINGS, APP_SETTINGS, init
@@ -118,6 +119,101 @@ def test_connection() -> bool:
         logger.error(f"خطأ في اختبار الاتصال بـ DeepSeek API: {e}")
         return False
 
+def load_data_file(data_file: str = "data.json") -> Dict:
+    """
+    تحميل بيانات من ملف JSON
+    
+    :param data_file: مسار ملف البيانات
+    :return: البيانات المحملة كقاموس
+    """
+    try:
+        with open(data_file, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"خطأ في تحميل ملف البيانات: {e}")
+        return {}
+
+def get_company_info(data_file: str = "data.json") -> str:
+    """
+    الحصول على معلومات عن مجمع عمال مصر
+    
+    :param data_file: مسار ملف البيانات
+    :return: نص المعلومات
+    """
+    data = load_data_file(data_file)
+    
+    # البحث عن السؤال المتعلق بالمعلومات العامة عن المجمع
+    about_company = ""
+    leadership = ""
+    projects = ""
+    
+    for prompt in data.get("prompts", []):
+        if prompt.get("id") == 1:  # ما هو مجمع عمال مصر؟
+            about_company = prompt.get("answer", "")
+        elif prompt.get("id") == 2:  # من يدير المجمع؟
+            leadership = prompt.get("answer", "")
+        elif prompt.get("id") == 3:  # ما هي أبرز مشروعات المجمع؟
+            projects = prompt.get("answer", "")
+    
+    # تجميع المعلومات في رد شامل
+    return f"""معلومات عن مجمع عمال مصر:
+
+• *نبذة عن المجمع*:
+{about_company}
+
+• *قيادة المجمع*:
+{leadership}
+
+• *أبرز المشروعات*:
+{projects}
+
+يمكنك زيارة موقعنا الرسمي للحصول على معلومات أكثر تفصيلاً: https://www.omalmisr.com/
+أو التواصل معنا مباشرة عبر:
+📞 تليفون/واتساب: {data.get("contact_info", {}).get("whatsapp", {}).get("main_office", "01100901200")}
+✉️ البريد الإلكتروني: {data.get("contact_info", {}).get("email", "info@omalmisr.com")}
+"""
+
+def handle_local_response(user_message: str, data_file: str = "data.json") -> Tuple[str, bool]:
+    """
+    التعامل مع الاستجابات المحلية للأسئلة المحددة
+    
+    :param user_message: رسالة المستخدم
+    :param data_file: مسار ملف البيانات
+    :return: زوج من الرد ومؤشر يحدد ما إذا تم العثور على رد محلي
+    """
+    user_message = user_message.lower().strip()
+    
+    # قائمة من أنماط الأسئلة وردودها
+    local_patterns = [
+        (
+            r'(معلومات|ايه|إيه|شنو|ما هي|ماهي|ما هو|ماهو|اعرف|أعرف).*?(شركة|شركه|المجمع|مجمع|المؤسسة|مؤسسة|مؤسسه)',
+            get_company_info(data_file)
+        ),
+        (
+            r'(مين|من|من هو|منهو).*?(صاحب|مالك|رئيس|مدير|يدير).*?(الشركة|الشركه|المجمع|مجمع)',
+            lambda: load_data_file(data_file).get("prompts", [])[1].get("answer", "") if len(load_data_file(data_file).get("prompts", [])) > 1 else ""
+        ),
+        (
+            r'(نشاط|نشاطات|فعاليات|مشاريع|مشروعات|إنجازات|انجازات).*?(الشركة|الشركه|المجمع|مجمع)',
+            lambda: load_data_file(data_file).get("prompts", [])[2].get("answer", "") if len(load_data_file(data_file).get("prompts", [])) > 2 else ""
+        ),
+        (
+            r'(أين|اين|فين|وين|مكان|موقع|عنوان|مقر).*?(الشركة|الشركه|المجمع|مجمع)',
+            lambda: load_data_file(data_file).get("prompts", [])[9].get("answer", "") if len(load_data_file(data_file).get("prompts", [])) > 9 else ""
+        ),
+    ]
+    
+    # محاولة مطابقة رسالة المستخدم مع الأنماط
+    for pattern, response in local_patterns:
+        if re.search(pattern, user_message, re.IGNORECASE):
+            # إذا كانت الاستجابة دالة، قم بتنفيذها للحصول على الرد
+            if callable(response):
+                return response(), True
+            return response, True
+    
+    # لم يتم العثور على تطابق
+    return "", False
+
 def main() -> None:
     """
     الدالة الرئيسية لواجهة المحادثة المحلية
@@ -176,6 +272,12 @@ def main() -> None:
                         print(f"اسم المستخدم: {bot.conversation_history[user_id]['user_name']}")
                 else:
                     print("لا توجد إحصائيات متاحة.")
+                continue
+            
+            # التحقق من الردود المحلية
+            local_response, found = handle_local_response(user_message)
+            if found:
+                print(f"\nمحمد سلامة: {local_response}")
                 continue
             
             # الحصول على رد الشات بوت

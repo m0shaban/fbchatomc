@@ -283,5 +283,176 @@
       "التسويق والمبيعات",
       "الخدمات اللوجستية"
     ],
-    "personalize_response": true
-  }
+    "personalize_response": true,
+    "menu_buttons": {
+      "main_menu": [
+        {
+          "id": "find_job",
+          "title": "أبحث عن عمل",
+          "description": "سجل معنا لتجد وظيفتك المناسبة",
+          "url": "https://omalmisrservices.com/ar/jobs",
+          "has_submenu": false
+        },
+        {
+          "id": "find_workers",
+          "title": "أبحث عن موظفين و عمال",
+          "description": "سجل بياناتك للحصول على موظفيين",
+          "url": "https://omalmisrservices.com/ar/workers",
+          "has_submenu": false
+        },
+        {
+          "id": "company_services",
+          "title": "خدمات الشركات",
+          "description": "خدمات الاستثمار الصناعي والزراعي",
+          "url": "https://omalmisrservices.com/ar/companies",
+          "has_submenu": true
+        },
+        {
+          "id": "dispute_resolution",
+          "title": "بوابة فض و تسوية المنازاعات",
+          "description": "بوابة إلكترونية لحل وتسوية المنازعات",
+          "url": "https://omalmisrservices.com/ar/dispute",
+          "has_submenu": true
+        },
+        {
+          "id": "about_us",
+          "title": "من نحن",
+          "description": "تعرف على مجمع عمال مصر",
+          "url": "https://www.omalmisr.com/about",
+          "has_submenu": false
+        }
+      ],
+      "submenus": {
+        "company_services": [
+          {
+            "id": "investment_opportunities",
+            "title": "طرح الفرص الإستثمارية",
+            "description": "يختص هذا القسم بطرح الفرص الاستثمارية المميزة في المجال الصناعي والمجال الزراعي",
+            "url": "https://omalmisrservices.com/ar/companies/formView?type=1&media_id=2&title=%D8%B7%D8%B1%D8%AD%20%D8%A7%D9%84%D9%81%D8%B1%D8%B5%20%D8%A7%D9%84%D8%A5%D8%B3%D8%AA%D8%AB%D9%85%D8%A7%D8%B1%D9%8A%D8%A9"
+          },
+          {
+            "id": "feasibility_studies",
+            "title": "دراسات الجدوى الإقتصادية",
+            "description": "تأتي مهمة هذا القسم في عمل الدراسات اللازمة للمشروع",
+            "url": "https://omalmisrservices.com/ar/companies/formView?type=1&media_id=3&title=%D8%AF%D8%B1%D8%A7%D8%B3%D8%A7%D8%AA%20%D8%A7%D9%84%D8%AC%D8%AF%D9%88%D9%89%20%D8%A7%D9%84%D8%A5%D9%82%D8%AA%D8%B5%D8%A7%D8%AF%D9%8A%D8%A9"
+          },
+          {
+            "id": "strategic_partnership",
+            "title": "الشراكة الإستراتيجية",
+            "description": "تتكون مهمة هذا القسم في عمل الدراسات اللازمة لإقامة المشروع",
+            "url": "https://omalmisrservices.com/ar/companies/formView?type=1&media_id=4&title=%D8%A7%D9%84%D8%B4%D8%B1%D8%A7%D9%83%D8%A9%20%D8%A7%D9%84%D8%A5%D8%B3%D8%AA%D8%B1%D8%A7%D8%AA%D9%8A%D8%AC%D9%8A%D8%A9"
+          },
+          {
+            "id": "industrial_real_estate",
+            "title": "الإنشاءات والعقارات الصناعية",
+            "description": "يختص هذا القسم بعمل الرسومات والتصميمات الهندسية للمنشأة الصناعية",
+            "url": "https://omalmisrservices.com/ar/companies/formView?type=1&media_id=5&title=%D8%A7%D9%84%D8%A5%D9%86%D8%B4%D8%A7%D8%A1%D8%A7%D8%AA%20%D9%88%D8%A7%D9%84%D8%B9%D9%82%D8%A7%D8%B1%D8%A7%D8%AA%20%D8%A7%D9%84%D8%B5%D9%86%D8%A7%D8%B9%D9%8A%D8%A9"
+          },
+          {
+            "id": "raw_materials",
+            "title": "الخامات ومستلزمات الإنتاج",
+            "description": "يختص هذا القسم بتوفير الخامات ومستلزمات الإنتاج",
+            "url": "https://omalmisrservices.com/ar/companies/formView?type=1&media_id=6&title=%D8%A7%D9%84%D8%AE%D8%A7%D9%85%D8%A7%D8%AA%20%D9%88%D9%85%D8%B3%D8%AA%D9%84%D8%B2%D9%85%D8%A7%D8%AA%20%D8%A7%D9%84%D8%A5%D9%86%D8%AA%D8%A7%D8%AC"
+          },
+          {
+            "id": "local_marketing",
+            "title": "التسويق المحلي للمنتجات",
+            "description": "يختص هذا القسم بإجراء تحليل للسوق تمهيدا لدخول منتج جديد في السوق",
+            "url": "https://omalmisrservices.com/ar/companies/formView?type=1&media_id=7&title=%D8%A7%D9%84%D8%AA%D8%B3%D9%88%D9%8A%D9%82%20%D8%A7%D9%84%D9%85%D8%AD%D9%84%D9%8A%20%D9%84%D9%84%D9%85%D9%86%D8%AA%D8%AC%D8%A7%D8%AA%20%D8%A7%D9%84%D8%B5%D9%86%D8%A7%D8%B9%D9%8A%D8%A9%20%D9%88%20%D8%A7%D9%84%D8%B2%D8%B1%D8%A7%D8%B9%D9%8A%D8%A9"
+          },
+          {
+            "id": "international_marketing",
+            "title": "التسويق الدولي للمنتجات",
+            "description": "يختص هذا القسم بإجراء تحليل للسوق تمهيدا لتصدير المنتجات الصناعية",
+            "url": "https://omalmisrservices.com/ar/companies/formView?type=1&media_id=8&title=%D8%A7%D9%84%D8%AA%D8%B3%D9%88%D9%8A%D9%82%20%D8%A7%D9%84%D8%AF%D9%88%D9%84%D9%8A%20%D9%84%D9%84%D9%85%D9%86%D8%AA%D8%AC%D8%A7%D8%AA%20%D8%A7%D9%84%D8%B5%D9%86%D8%A7%D8%B9%D9%8A%D8%A9%20%D9%88%20%D8%A7%D9%84%D8%B2%D8%B1%D8%A7%D8%B9%D9%8A%D8%A9"
+          },
+          {
+            "id": "government_services",
+            "title": "الخدمات الحكومية",
+            "description": "هذا القسم يختص بوضع حلول لكافة العقبات للمستثمرين في القطاع الصناعي",
+            "url": "https://omalmisrservices.com/ar/companies/formView?type=1&media_id=9&title=%D8%A7%D9%84%D8%AE%D8%AF%D9%85%D8%A7%D8%AA%20%D8%A7%D9%84%D8%AD%D9%83%D9%88%D9%85%D9%8A%D8%A9"
+          },
+          {
+            "id": "education_research",
+            "title": "خدمات التعليم والبحث العلمي",
+            "description": "تقديم الدورات التدريبية للكوادر البشرية الفنية والإدارية",
+            "url": "https://omalmisrservices.com/ar/companies?type=7"
+          },
+          {
+            "id": "financial_affairs",
+            "title": "خدمة الشؤون المالية",
+            "description": "تقديم خدمة إدارة الشؤون المالية للمنشآت",
+            "url": "https://omalmisrservices.com/ar/companies?type=8"
+          },
+          {
+            "id": "it_services",
+            "title": "خدمة تكنولوجيا المعلومات",
+            "description": "يقدم هذا القطاع خدمات إنشاء المواقع الإلكترونية والتطبيقات",
+            "url": "https://omalmisrservices.com/ar/companies?type=6"
+          },
+          {
+            "id": "legal_consultation",
+            "title": "خدمات الاستشارات القانونية",
+            "description": "قطاع مسؤول عن جميع الاستشارات القانونية الخاصة بالشركات",
+            "url": "https://omalmisrservices.com/ar/companies?type=5"
+          },
+          {
+            "id": "media_services",
+            "title": "الخدمات الإعلامية",
+            "description": "يوفر الأفكار الإعلانية والحملات الدعائية وخدمات الجرافيك",
+            "url": "https://omalmisrservices.com/ar/companies?type=4"
+          },
+          {
+            "id": "hr_marketing",
+            "title": "خدمات تسويق الموارد البشرية",
+            "description": "يختص هذا القطاع بتوفير الكوادر البشرية المدربة والمؤهلة",
+            "url": "https://omalmisrservices.com/ar/companies?type=3"
+          },
+          {
+            "id": "job_marketing",
+            "title": "خدمات تسويق فرص العمل",
+            "description": "يختص هذا القطاع في التواصل مع المتقدمين على الوظائف",
+            "url": "https://omalmisrservices.com/ar/companies?type=2"
+          },
+          {
+            "id": "industrial_investment",
+            "title": "خدمة الإستثمار الصناعي والزراعي",
+            "description": "يتم تقديم الخدمات الاستثمارية على ثلاث مراحل",
+            "url": "https://omalmisrservices.com/ar/companies?type=1"
+          }
+        ],
+        "dispute_resolution": [
+          {
+            "id": "facility_dispute",
+            "title": "نزاع المنشآت",
+            "description": "حل النزاعات بين المنشآت",
+            "url": "https://omalmisrservices.com/ar/dispute/facility"
+          },
+          {
+            "id": "worker_dispute",
+            "title": "نزاع العمال",
+            "description": "حل النزاعات بين المنشآت والعاملين بها",
+            "url": "https://omalmisrservices.com/ar/dispute/worker"
+          }
+        ]
+      }
+    },
+    "about_us": {
+      "vision": "نعمل برؤية مستدامة حتي تصبح منظومة عمال مصر كيان خدمي صناعي تعليمى زراعى يؤثر فى منظومة الاقتصاد الدولى وأن تقود عمال مصر أكبر تكتل صناعى ومحفظة إستثمارية صناعية هي الاولى من نوعها إفريقيا وع",
+      "mission": "الريادة في صناعة الخدمات محليًا وعالميًا للسوق الصناعي من خال توحيد باب الخدمة للمستثمر الصناعي باستخدام أحدث الأساليب والأدوات التكنولوجية وفقًا لاستراتيجية التنمية المستدامة العالمية ونشر الوعي بالثقافة الصناعية وأهميتها وزيادة الإنتاج مع التمسك بعقيدة عمل مؤسسة والنهوض بأعضائها ومستثمريها.",
+      "objectives": [
+        "توحيد باب الخدمة للمستثمر الصناعي.",
+        "أن نكون البوابة الرائدة للمستثمرين الصناعيين والكوادر البشرية لدخولهم سوق العمل الصناعي.",
+        "أن نصبح منظومة إقتصادية تؤثر في سوق العمل العالمي.",
+        "إنشاء مراكز تدريب وتأهيل ومدارس تكنولوجيا تطبيقية في كل منطقة صناعية.",
+        "نطمح للوصول لتدريب 500 ألف شاب سعودى على القطاع الصناعى، وأيضا توفير 500 ألف فرصة عمل فى البيئة الصناعية. تخرج وتدريب 100 ألف رجل أعمال جديد فى ريادة الأعمال الصناعية طبقاً لرؤية المملكة 2030"
+      ]
+    },
+    "social_media": {
+      "youtube": "https://www.youtube.com/channel/UCAkYTIf30ypaEE5gfrMhdUw",
+      "instagram": "https://www.instagram.com/omalmisr/",
+      "linkedin": "https://www.linkedin.com/company/79479037/admin/feed/posts/",
+      "twitter": "https://twitter.com/omalmisr1",
+      "facebook": "https://www.facebook.com/Omal.Misr.Foundation/"
+    }
+}
