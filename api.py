@@ -19,6 +19,105 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+class DeepSeekAPI:
+    """
+    واجهة للتفاعل مع DeepSeek API
+    """
+    
+    def __init__(self, api_key: str = None):
+        """
+        تهيئة واجهة DeepSeek API
+        
+        :param api_key: مفتاح API (اختياري، سيتم استخدام القيمة من الإعدادات إذا لم يتم تحديدها)
+        """
+        self.api_key = api_key or API_SETTINGS.get("DEEPSEEK_API_KEY")
+        self.api_url = API_SETTINGS.get("DEEPSEEK_API_URL", "https://api.deepseek.com/v1/chat/completions")
+        self.default_model = API_SETTINGS.get("DEFAULT_MODEL", "deepseek-chat")
+        self.max_tokens = API_SETTINGS.get("MAX_TOKENS", 1000)
+        self.temperature = API_SETTINGS.get("TEMPERATURE", 0.7)
+        
+        logger.info(f"تم تهيئة واجهة DeepSeek API بنموذج افتراضي: {self.default_model}")
+    
+    def generate_response(self, prompt: str, context: str = None, model: str = None) -> str:
+        """
+        توليد رد باستخدام DeepSeek API
+        
+        :param prompt: سؤال المستخدم
+        :param context: سياق المحادثة (اختياري)
+        :param model: اسم النموذج (اختياري)
+        :return: النص المولد
+        :raises: Exception في حالة وجود خطأ
+        """
+        if not self.api_key:
+            raise Exception("مفتاح DeepSeek API غير متوفر")
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        messages = []
+        
+        # إضافة السياق كرسالة نظام إذا كان موجودًا
+        if context:
+            messages.append({"role": "system", "content": context})
+        
+        # إضافة سؤال المستخدم
+        messages.append({"role": "user", "content": prompt})
+        
+        payload = {
+            "model": model or self.default_model,
+            "messages": messages,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature
+        }
+        
+        try:
+            response = requests.post(self.api_url, headers=headers, json=payload)
+            response.raise_for_status()
+            
+            response_data = response.json()
+            
+            if "choices" in response_data and len(response_data["choices"]) > 0:
+                content = response_data["choices"][0].get("message", {}).get("content", "")
+                return content
+            else:
+                error_message = f"خطأ في استجابة DeepSeek API: {response_data}"
+                logger.error(error_message)
+                raise Exception(error_message)
+                
+        except requests.exceptions.RequestException as e:
+            error_message = f"خطأ في الاتصال بـ DeepSeek API: {str(e)}"
+            logger.error(error_message)
+            raise Exception(error_message)
+    
+    def validate_connection(self) -> Dict[str, Any]:
+        """
+        التحقق من صحة الاتصال بـ API
+        
+        :return: قاموس يحتوي على حالة الاتصال
+        """
+        result = {
+            "status": "غير متصل", 
+            "error": None
+        }
+        
+        # اختبار اتصال DeepSeek API
+        if self.api_key:
+            try:
+                test_response = self.generate_response("مرحبا", "هذا اختبار اتصال. رد بكلمة 'متصل' فقط.")
+                if "متصل" in test_response.lower():
+                    result["status"] = "متصل"
+                else:
+                    result["error"] = "رد غير متوقع من API"
+            except Exception as e:
+                result["error"] = str(e)
+        else:
+            result["error"] = "مفتاح API غير متوفر"
+        
+        return result
+
+
 class LLMAPI:
     """
     واجهة للتفاعل مع نماذج اللغة الكبيرة مثل DeepSeek أو OpenAI
