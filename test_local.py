@@ -4,124 +4,134 @@
 برنامج لاختبار الشات بوت محلياً قبل نشره على الفيسبوك ماسنجر
 هذا الملف يساعد في اختبار "محمد سلامة" بوت في بيئة محلية عبر واجهة سطر الأوامر
 """
-
 import os
 import sys
-import json
 import time
+import json
 import random
+import platform
+import subprocess
+from datetime import datetime
 from bot import ChatBot
 from config import BOT_SETTINGS, APP_SETTINGS, setup_log_directory, setup_conversations_directory
 
 def clear_screen():
-    """مسح الشاشة بما يتناسب مع نظام التشغيل"""
-    os.system('cls' if os.name == 'nt' else 'clear')
+    """مسح الشاشة بطريقة متوافقة مع نظام التشغيل"""
+    if platform.system() == "Windows":
+        os.system("cls")
+    else:
+        os.system("clear")
 
 def print_header():
-    """طباعة ترويسة البرنامج"""
-    print("\n" + "=" * 60)
-    print(" " * 20 + "مجمع عمال مصر")
-    print(" " * 15 + "اختبار شات بوت محمد سلامة")
-    print("=" * 60 + "\n")
+    """طباعة رأس الصفحة للترحيب بالمستخدم"""
+    header = """
+============================================================
+                    مجمع عمال مصر
+               اختبار شات بوت محمد سلامة
+============================================================
+
+أهلاً بك في اختبار شات بوت محمد سلامة!
+يمكنك التحدث مع البوت وسيرد عليك. اكتب 'خروج' للخروج أو 'حفظ' لحفظ المحادثة.
+"""
+    print(header)
 
 def print_response(message, delay=0.01):
-    """
-    طباعة رسالة البوت بتأخير قليل لتقليد الكتابة
-    
-    :param message: الرسالة المراد طباعتها
-    :param delay: التأخير بين كل حرف (بالثواني)
-    """
+    """طباعة رد الشات بوت مع تأثير الكتابة الحية"""
+    print("\n🤵 محمد: ")
     for char in message:
         print(char, end='', flush=True)
         time.sleep(delay)
-    print()
+    print()  # سطر جديد بعد الانتهاء من الرسالة
 
-def save_conversation(conversation_history, filename="local_conversation.json"):
-    """
-    حفظ المحادثة في ملف JSON
+def setup_terminal_encoding():
+    """إعداد ترميز الطرفية لدعم اللغة العربية"""
+    if platform.system() == "Windows":
+        try:
+            # محاولة ضبط ترميز النافذة الطرفية في ويندوز
+            subprocess.run(["chcp", "65001"], shell=True, check=False)
+            os.system("chcp 65001 > nul")
+        except Exception:
+            print("تعذّر ضبط ترميز النافذة الطرفية، قد تظهر الأحرف العربية بشكل غير صحيح.")
+    else:
+        # تأكد من ضبط متغيرات البيئة في لينكس/ماك
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
+
+def save_conversation(bot, user_id, filename=None):
+    """حفظ المحادثة في ملف"""
+    # التأكد من وجود مجلد المحادثات
+    if not os.path.exists(BOT_SETTINGS.get("CONVERSATIONS_DIR", "conversations")):
+        os.makedirs(BOT_SETTINGS.get("CONVERSATIONS_DIR", "conversations"))
     
-    :param conversation_history: سجل المحادثة
-    :param filename: اسم ملف الحفظ
-    """
-    conversations_dir = BOT_SETTINGS.get("CONVERSATIONS_DIR", "conversations")
-    filepath = os.path.join(conversations_dir, filename)
+    # إنشاء اسم ملف فريد إذا لم يتم تمريره
+    if filename is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = os.path.join(BOT_SETTINGS.get("CONVERSATIONS_DIR", "conversations"), f"local_chat_{timestamp}.json")
     
-    try:
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(conversation_history, f, ensure_ascii=False, indent=4)
-        print(f"\n[تم حفظ المحادثة في {filepath}]")
-    except Exception as e:
-        print(f"\n[خطأ في حفظ المحادثة: {e}]")
+    # حفظ المحادثة باستخدام دالة الشات بوت
+    success = bot.save_conversation_history(filename)
+    
+    if success:
+        print(f"\nتم حفظ المحادثة في الملف: {filename}")
+    else:
+        print("\nحدث خطأ أثناء حفظ المحادثة.")
+    
+    return success
 
 def main():
-    """الدالة الرئيسية للبرنامج"""
-    # تأكد من وجود المجلدات اللازمة
+    """الدالة الرئيسية للتفاعل مع الشات بوت"""
+    # إعداد ترميز الطرفية
+    setup_terminal_encoding()
+    
+    # إعداد بيئة التشغيل
     setup_log_directory()
     setup_conversations_directory()
     
-    # إنشاء كائن الشات بوت
-    chatbot = ChatBot()
-    
-    # معرف المستخدم الافتراضي للاختبار
-    user_id = f"local_user_{random.randint(1000, 9999)}"
-    
-    # سجل المحادثة
-    conversation_log = []
-    
-    # طباعة الترويسة
+    # مسح الشاشة وطباعة رأس الصفحة
     clear_screen()
     print_header()
     
-    print("أهلاً بك في اختبار شات بوت محمد سلامة!")
-    print("يمكنك التحدث مع البوت وسيرد عليك. اكتب 'خروج' للخروج أو 'حفظ' لحفظ المحادثة.")
-    print()
+    # إنشاء معرف فريد للمستخدم المحلي
+    user_id = f"local_user_{random.randint(1000, 9999)}"
     
-    # حلقة المحادثة
-    while True:
-        # الحصول على رسالة المستخدم
-        user_message = input("\n👤 أنت: ")
+    # تهيئة الشات بوت
+    try:
+        bot = ChatBot()
         
-        # التحقق من أوامر الخروج
-        if user_message.lower() in ["خروج", "exit", "quit", "q"]:
-            print("\nشكراً لاختبار الشات بوت! مع السلامة.")
+        # تشغيل حلقة المحادثة
+        while True:
+            # استقبال مدخلات المستخدم
+            try:
+                user_input = input("\n👤 أنت: ")
+            except KeyboardInterrupt:
+                print("\n\nتم إنهاء المحادثة بواسطة المستخدم.")
+                save_conversation(bot, user_id)
+                break
+            except Exception as e:
+                print(f"\nحدث خطأ في قراءة المدخلات: {e}")
+                continue
             
-            # سؤال المستخدم عن حفظ المحادثة
-            save_option = input("\nهل تريد حفظ هذه المحادثة؟ (نعم/لا): ").strip()
-            if save_option.lower() in ["نعم", "y", "yes"]:
-                save_conversation(conversation_log)
+            # التحقق من أوامر الخروج أو الحفظ
+            if user_input.lower() in ["خروج", "exit", "quit", "q"]:
+                print("\n🤵 محمد: شكراً لتواصلك معنا! نتطلع للتحدث معك مرة أخرى.")
+                break
+            elif user_input.lower() in ["حفظ", "save", "s"]:
+                save_conversation(bot, user_id)
+                continue
+            elif not user_input.strip():
+                continue
             
-            break
+            # الحصول على رد من الشات بوت
+            try:
+                response = bot.generate_response(user_input, user_id)
+                print_response(response)
+            except Exception as e:
+                print(f"\n🤵 محمد: عذراً، حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى. ({e})")
         
-        # التحقق من أمر الحفظ
-        if user_message.lower() in ["حفظ", "save", "s"]:
-            save_conversation(conversation_log)
-            continue
-        
-        # إضافة رسالة المستخدم إلى سجل المحادثة
-        conversation_log.append({
-            "role": "user",
-            "message": user_message,
-            "timestamp": time.time()
-        })
-        
-        # الحصول على رد البوت
-        bot_response = chatbot.generate_response(user_message, user_id)
-        
-        # طباعة رد البوت
-        print("\n🤵 محمد: ")
-        print_response(bot_response)
-        
-        # إضافة رد البوت إلى سجل المحادثة
-        conversation_log.append({
-            "role": "bot",
-            "message": bot_response,
-            "timestamp": time.time()
-        })
+        # حفظ المحادثة تلقائياً عند الخروج
+        save_conversation(bot, user_id)
+    
+    except Exception as e:
+        print(f"حدث خطأ غير متوقع: {e}")
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\n\nتم إنهاء البرنامج بواسطة المستخدم. مع السلامة!")
-    except Exception as e:
-        print(f"\n\nحدث خطأ غير متوقع: {e}")
+    main()

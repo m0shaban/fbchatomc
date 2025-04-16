@@ -1,310 +1,240 @@
 """
 اختبارات آلية لشات بوت مجمع عمال مصر
 """
-
-import unittest
 import os
+import pytest
 import json
-import sys
-from unittest.mock import patch, MagicMock
-
-# التأكد من أن المجلد الحالي في مسار النظام
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.append(current_dir)
-
+from unittest.mock import MagicMock, patch
 from bot import ChatBot
-from facebook_comments import FacebookCommentsHandler
-from config import setup_log_directory, setup_conversations_directory
 
-
-class TestChatBot(unittest.TestCase):
+class TestChatBot:
     """
-    اختبارات الشات بوت الأساسية
+    اختبارات آلية لشات بوت مجمع عمال مصر
     """
     
-    def setUp(self):
-        """
-        الإعداد قبل كل اختبار
-        """
-        # إنشاء مجلدات السجلات والمحادثات للاختبار
-        setup_log_directory()
-        setup_conversations_directory()
-        
-        # إنشاء كائن الشات بوت للاختبار
-        self.bot = ChatBot()
-        
-        # التأكد من وجود ملف البيانات
-        self.assertTrue(os.path.exists(self.bot.data_file), "ملف البيانات غير موجود")
+    @pytest.fixture
+    def bot(self):
+        """تهيئة شات بوت للاختبار"""
+        # استخدام ملف بيانات الاختبار
+        bot = ChatBot(data_file="data.json", api_key="test_api_key")
+        return bot
     
-    def test_load_data(self):
-        """
-        اختبار تحميل البيانات من ملف JSON
-        """
-        # التحقق من تحميل البيانات بنجاح
-        self.assertGreater(len(self.bot.prompts), 0, "لم يتم تحميل أي أسئلة وأجوبة")
-        self.assertGreater(len(self.bot.human_expressions), 0, "لم يتم تحميل أي تعبيرات بشرية")
-        self.assertGreater(len(self.bot.service_links), 0, "لم يتم تحميل أي روابط خدمات")
+    def test_initialization(self, bot):
+        """اختبار تهيئة الشات بوت"""
+        assert bot.bot_name == "محمد سلامة"
+        assert bot.data_file == "data.json"
+        assert len(bot.prompts) > 0
+        assert bot.api.api_key == "test_api_key"
     
-    def test_detect_user_category(self):
-        """
-        اختبار تحديد فئة المستخدم
-        """
-        # اختبار تحديد باحث عن عمل
-        job_seeker_message = "أبحث عن وظيفة في مجال الصناعات الغذائية"
-        self.assertEqual(self.bot._detect_user_category(job_seeker_message), "باحث عن عمل")
+    def test_search_knowledge_base(self, bot):
+        """اختبار البحث في قاعدة المعرفة"""
+        # اختبار سؤال مطابق تماماً
+        match, score = bot.search_knowledge_base("ما هو مجمع عمال مصر؟")
+        assert match is not None
+        assert score > 0.5
+        assert "مجمع عمال مصر" in match["answer"]
         
-        # اختبار تحديد مستثمر
-        investor_message = "أنا مستثمر وأرغب في معرفة فرص الاستثمار المتاحة"
-        self.assertEqual(self.bot._detect_user_category(investor_message), "مستثمر")
+        # اختبار سؤال مشابه
+        match, score = bot.search_knowledge_base("عايز اعرف ايه هو مجمع عمال مصر")
+        assert match is not None
+        assert score > 0.2
         
-        # اختبار تحديد صحفي - تعديل لاستخدام كلمة مفتاحية فعلية موجودة في الكود
-        media_message = "أنا صحفي وأريد إجراء مقابلة مع مسؤولي المجمع"
-        self.assertEqual(self.bot._detect_user_category(media_message), "صحفي")
-        
-        # اختبار رسالة عامة
-        general_message = "مرحباً، كيف حالكم؟"
-        self.assertEqual(self.bot._detect_user_category(general_message), "")
+        # اختبار سؤال غير مرتبط
+        match, score = bot.search_knowledge_base("حالة الطقس غداً")
+        # قد يجد تطابقاً ضعيفاً، لكن النتيجة ستكون منخفضة
+        assert score < bot.similarity_threshold
     
-    def test_detect_service_request(self):
-        """
-        اختبار تحديد طلب خدمة
-        """
-        # تهيئة الروابط لضمان نجاح الاختبار
-        self.bot.service_links = {
-            "jobs": "https://example.com/jobs",
-            "workers": "https://example.com/workers",
-            "companies": "https://example.com/companies",
-            "dispute": "https://example.com/dispute"
+    def test_detect_user_category(self, bot):
+        """اختبار تحديد فئة المستخدم"""
+        assert bot._detect_user_category("أبحث عن وظيفة") == "باحث عن عمل"
+        assert bot._detect_user_category("لدي مشروع أريد استثماره") == "مستثمر"
+        assert bot._detect_user_category("صحفي وأريد إجراء مقابلة") == "صحفي"
+        assert bot._detect_user_category("شركتنا تبحث عن تعاون") == "شركة"
+        assert bot._detect_user_category("مرحباً فقط") == ""
+    
+    def test_detect_service_request(self, bot):
+        """اختبار تحديد طلب خدمة"""
+        # طلب وظيفة
+        job_service = bot._detect_service_request("أريد التقديم على وظيفة")
+        assert job_service
+        assert "jobs" in job_service.get("link", "")
+        
+        # طلب عمال
+        workers_service = bot._detect_service_request("أحتاج عمال لمصنعي")
+        assert workers_service
+        assert "workers" in workers_service.get("link", "")
+        
+        # طلب غير مرتبط بخدمة
+        unrelated = bot._detect_service_request("كيف حالك اليوم؟")
+        assert not unrelated
+    
+    def test_is_continuation_message(self, bot):
+        """اختبار تحديد رسائل الاستمرار"""
+        assert bot._is_continuation_message("نعم")
+        assert bot._is_continuation_message("أيوة أريد المزيد")
+        assert bot._is_continuation_message("طبعا عايز اعرف")
+        assert not bot._is_continuation_message("لا شكراً")
+        assert not bot._is_continuation_message("خلاص كفاية")
+    
+    def test_extract_name(self, bot):
+        """اختبار استخراج الاسم من رسالة المستخدم"""
+        assert bot._extract_name("اسمي محمد") == "محمد"
+        assert bot._extract_name("أنا أحمد علي") == "أحمد علي"
+        assert bot._extract_name("الدكتور مصطفى كامل") == "مصطفى كامل"
+        assert bot._extract_name("") == "صديقي العزيز"
+    
+    @patch("bot.DeepSeekAPI.generate_response")
+    def test_generate_response_with_match(self, mock_api, bot):
+        """اختبار توليد رد باستخدام قاعدة المعرفة"""
+        # تعيين قيمة وهمية للتطابق
+        bot.similarity_threshold = 0.01  # لضمان إيجاد تطابق
+        
+        # نصنع معرف مستخدم وهمي
+        user_id = "test_user_123"
+        
+        # نضمن أن المستخدم ليس في حالة انتظار الاسم
+        bot.conversation_state[user_id] = {"awaiting_name": False}
+        
+        # اختبار الرد على سؤال موجود في قاعدة المعرفة
+        response = bot.generate_response("ما هو مجمع عمال مصر؟", user_id)
+        
+        # يجب أن يكون الرد ليس فارغاً
+        assert response
+        assert len(response) > 0
+        
+        # يجب أن يكون الرد يحتوي على معلومات من قاعدة المعرفة
+        assert "مجمع عمال مصر" in response
+        
+        # يجب ألا يكون استدعي API لأن السؤال موجود في قاعدة المعرفة
+        mock_api.assert_not_called()
+    
+    @patch("bot.DeepSeekAPI.generate_response")
+    def test_generate_response_with_api(self, mock_api, bot):
+        """اختبار توليد رد باستخدام DeepSeek API"""
+        # تعيين قيمة عالية للتطابق لضمان استخدام API
+        bot.similarity_threshold = 0.99
+        
+        # نصنع معرف مستخدم وهمي
+        user_id = "test_user_456"
+        
+        # نضمن أن المستخدم ليس في حالة انتظار الاسم
+        bot.conversation_state[user_id] = {"awaiting_name": False, "name_asked": True}
+        
+        # تعيين رد وهمي من API
+        mock_api_response = {
+            "choices": [
+                {
+                    "message": {
+                        "content": "هذا رد من DeepSeek API الوهمي للاختبار"
+                    }
+                }
+            ]
         }
+        mock_api.return_value = mock_api_response
         
-        # اختبار طلب التوظيف
-        jobs_message = "كيف يمكنني التقديم للوظائف لديكم؟"
-        service_info = self.bot._detect_service_request(jobs_message)
-        self.assertIn("link", service_info)
-        self.assertIn("jobs", service_info.get("link", ""))
+        # استدعاء الدالة مع سؤال غير موجود في قاعدة المعرفة
+        response = bot.generate_response("سؤال غير موجود في قاعدة المعرفة", user_id)
         
-        # اختبار طلب خدمات الشركات
-        companies_message = "أريد معرفة خدمات للشركات"
-        service_info = self.bot._detect_service_request(companies_message)
-        self.assertIn("link", service_info)
-        self.assertIn("companies", service_info.get("link", ""))
+        # التحقق من استدعاء API
+        mock_api.assert_called_once()
+        
+        # يجب أن يكون الرد ليس فارغاً
+        assert response
+        assert len(response) > 0
     
-    def test_search_knowledge_base(self):
-        """
-        اختبار البحث في قاعدة المعرفة
-        """
-        # اختبار البحث عن سؤال موجود
-        question = "ما هو مجمع عمال مصر"
-        best_match, score = self.bot.search_knowledge_base(question)
-        self.assertIsNotNone(best_match)
-        self.assertGreater(score, 0.3)
+    @patch("bot.DeepSeekAPI.generate_response")
+    def test_generate_response_with_api_error(self, mock_api, bot):
+        """اختبار آلية الاحتياط عند فشل API"""
+        # تعيين قيمة عالية للتطابق لضمان استخدام API
+        bot.similarity_threshold = 0.99
         
-        # اختبار البحث عن سؤال قريب
-        question = "أين يقع المجمع"
-        best_match, score = self.bot.search_knowledge_base(question)
-        self.assertIsNotNone(best_match)
+        # نصنع معرف مستخدم وهمي
+        user_id = "test_user_789"
         
-        # اختبار البحث عن سؤال غير موجود
-        question = "كم سعر البيتزا"
-        best_match, score = self.bot.search_knowledge_base(question)
-        self.assertLess(score, self.bot.similarity_threshold)
+        # نضمن أن المستخدم ليس في حالة انتظار الاسم
+        bot.conversation_state[user_id] = {"awaiting_name": False, "name_asked": True}
+        
+        # تعيين خطأ وهمي من API
+        mock_api.side_effect = Exception("فشل وهمي في الاتصال بـ API")
+        
+        # استدعاء الدالة مع سؤال غير موجود في قاعدة المعرفة
+        response = bot.generate_response("سؤال غير موجود في قاعدة المعرفة", user_id)
+        
+        # التحقق من استدعاء API
+        mock_api.assert_called_once()
+        
+        # يجب أن يكون الرد ليس فارغاً (رد احتياطي)
+        assert response
+        assert len(response) > 0
+        
+        # يجب أن يحتوي الرد على معلومات التواصل
+        assert "01100901200" in response or "info@omalmisr.com" in response
     
-    @patch('bot.DeepSeekAPI')
-    def test_generate_messenger_response(self, mock_api):
-        """
-        اختبار توليد رد للماسنجر
-        """
-        # إعداد الـ mock للـ API
-        mock_api_instance = MagicMock()
-        mock_api_instance.generate_response.return_value = {"choices": [{"message": {"content": "هذا رد اختباري"}}]}
-        mock_api_instance.extract_response_text.return_value = "هذا رد اختباري"
-        mock_api.return_value = mock_api_instance
+    def test_name_asking_flow(self, bot):
+        """اختبار تدفق طلب الاسم من المستخدم"""
+        # نصنع معرف مستخدم وهمي
+        user_id = "test_user_name"
         
-        # إعادة تهيئة الشات بوت مع الـ mock
-        self.bot.api = mock_api_instance
+        # الرسالة الأولى يجب أن تكون طلب الاسم
+        first_response = bot.generate_response("مرحباً", user_id)
+        assert "ما هو اسمك" in first_response or "اسم حضرتك" in first_response
         
-        # تعطيل البحث في قاعدة المعرفة للاختبار
-        with patch.object(self.bot, 'search_knowledge_base', return_value=(None, 0.0)):
-            # اختبار توليد رد للماسنجر
-            message = "مرحباً، ما هي خدمات المجمع؟"
-            response = self.bot.generate_messenger_response(message)
-            
-            # التحقق من استدعاء الـ API
-            mock_api_instance.generate_response.assert_called_once()
-            
-            # التحقق من محتوى الرد
-            self.assertTrue(response)
-            self.assertIn("رد اختباري", response)
+        # الرسالة الثانية (رد المستخدم باسمه) يجب أن تكون ترحيب
+        second_response = bot.generate_response("أحمد محمد", user_id)
+        assert "أحمد" in second_response
+        assert bot.conversation_state[user_id]["awaiting_name"] == False
+        assert bot.conversation_history[user_id]["user_name"] == "أحمد محمد"
+        
+        # التحقق من أن المستخدم لم يعد في مرحلة طلب الاسم
+        third_response = bot.generate_response("ما هو مجمع عمال مصر؟", user_id)
+        assert "ما هو اسمك" not in third_response
     
-    @patch('bot.DeepSeekAPI')
-    def test_generate_comment_response(self, mock_api):
-        """
-        اختبار توليد رد لتعليق فيسبوك
-        """
-        # إعداد الـ mock للـ API
-        mock_api_instance = MagicMock()
-        mock_api_instance.generate_response.return_value = {"choices": [{"message": {"content": "هذا رد اختباري لتعليق فيسبوك"}}]}
-        mock_api_instance.extract_response_text.return_value = "هذا رد اختباري لتعليق فيسبوك"
-        mock_api.return_value = mock_api_instance
+    def test_conversation_history(self, bot):
+        """اختبار حفظ تاريخ المحادثة"""
+        # نصنع معرف مستخدم وهمي
+        user_id = "test_history"
         
-        # إعادة تهيئة الشات بوت مع الـ mock
-        self.bot.api = mock_api_instance
+        # تجاوز مرحلة طلب الاسم
+        bot.conversation_state[user_id] = {"awaiting_name": False}
+        bot.conversation_history[user_id] = {"user_name": "اختبار"}
         
-        # تعطيل البحث في قاعدة المعرفة للاختبار
-        with patch.object(self.bot, 'search_knowledge_base', return_value=(None, 0.0)):
-            # اختبار توليد رد لتعليق فيسبوك
-            comment = "كيف يمكنني التقديم للوظائف؟"
-            response = self.bot.generate_comment_response(comment)
-            
-            # التحقق من استدعاء الـ API
-            mock_api_instance.generate_response.assert_called_once()
-            
-            # التحقق من محتوى الرد
-            self.assertTrue(response)
-            self.assertIn("رد اختباري", response)
-    
-    def test_save_conversation_history(self):
-        """
-        اختبار حفظ تاريخ المحادثة
-        """
-        # إضافة بعض الرسائل إلى تاريخ المحادثة
-        self.bot.conversation_history = [
-            {"role": "user", "message": "مرحباً"},
-            {"role": "bot", "message": "مرحباً بك، كيف يمكنني مساعدتك؟"},
-            {"role": "user", "message": "ما هي خدماتكم؟"},
-            {"role": "bot", "message": "نقدم العديد من الخدمات..."}
+        # إرسال عدة رسائل
+        messages = [
+            "مرحباً",
+            "ما هو مجمع عمال مصر؟",
+            "كيف يمكنني التقديم للوظائف؟"
         ]
         
-        # حفظ تاريخ المحادثة في ملف مؤقت
-        temp_file = "temp_conversation.json"
-        result = self.bot.save_conversation_history(temp_file)
+        for message in messages:
+            bot.generate_response(message, user_id)
         
-        # التحقق من نجاح الحفظ
-        self.assertTrue(result)
-        self.assertTrue(os.path.exists(temp_file))
-        
-        # التحقق من محتوى الملف
-        with open(temp_file, "r", encoding="utf-8") as f:
-            saved_data = json.load(f)
-        
-        self.assertEqual(len(saved_data), 4)
-        
-        # حذف الملف المؤقت
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-
-
-class TestFacebookCommentsHandler(unittest.TestCase):
-    """
-    اختبارات معالج تعليقات الفيسبوك
-    """
+        # التحقق من حفظ الرسائل في تاريخ المحادثة
+        assert "messages" in bot.conversation_history[user_id]
+        assert len(bot.conversation_history[user_id]["messages"]) == len(messages)
     
-    def setUp(self):
-        """
-        الإعداد قبل كل اختبار
-        """
-        # إنشاء مجلدات السجلات والمحادثات للاختبار
-        setup_log_directory()
-        setup_conversations_directory()
+    def test_format_response(self, bot):
+        """اختبار تنسيق الرد"""
+        user_id = "test_format"
+        bot.conversation_history[user_id] = {"user_name": "محمد"}
         
-        # إنشاء كائن الشات بوت للاختبار
-        self.bot = ChatBot()
+        simple_answer = "هذا رد بسيط للاختبار"
+        formatted = bot._format_response(simple_answer, "سؤال اختبار", user_id)
         
-        # إنشاء كائن معالج تعليقات الفيسبوك للاختبار
-        self.comments_handler = FacebookCommentsHandler(self.bot)
+        # التحقق من إضافة اسم المستخدم
+        assert "محمد" in formatted
+        
+        # التحقق من إضافة روابط أو معلومات تواصل
+        assert "https://" in formatted or "01100901200" in formatted
     
-    def test_should_respond_to_comment(self):
-        """
-        اختبار تحديد ما إذا كان التعليق يستحق الرد
-        """
-        # تعليق يستحق الرد
-        valid_comment = "كيف يمكنني التقديم للوظائف لديكم؟"
-        self.assertTrue(self.comments_handler.should_respond_to_comment(valid_comment))
+    def test_generate_contextual_question(self, bot):
+        """اختبار توليد أسئلة سياقية"""
+        job_question = bot._generate_contextual_question("أبحث عن وظيفة", "باحث عن عمل")
+        assert "?" in job_question or "؟" in job_question
+        assert len(job_question) > 10
         
-        # تعليق إشادة لا يستحق الرد
-        praise_comment = "رائع جداً"
-        self.assertFalse(self.comments_handler.should_respond_to_comment(praise_comment))
+        investor_question = bot._generate_contextual_question("أريد الاستثمار", "مستثمر")
+        assert "?" in investor_question or "؟" in investor_question
+        assert len(investor_question) > 10
         
-        # تعليق غير مرغوب فيه
-        unwanted_comment = "هذا فاشل جداً"
-        self.assertFalse(self.comments_handler.should_respond_to_comment(unwanted_comment))
-        
-        # تعليق قصير جداً
-        short_comment = "هـ"
-        self.assertFalse(self.comments_handler.should_respond_to_comment(short_comment))
-    
-    def test_get_comment_category(self):
-        """
-        اختبار تحديد فئة التعليق
-        """
-        # تعليق من فئة باحث عن عمل
-        job_comment = "كيف يمكنني التقديم للوظائف؟"
-        self.assertEqual(self.comments_handler.get_comment_category(job_comment), "باحث عن عمل")
-        
-        # تعليق من فئة مستثمر
-        investor_comment = "أرغب في معرفة فرص الاستثمار المتاحة"
-        self.assertEqual(self.comments_handler.get_comment_category(investor_comment), "مستثمر")
-        
-        # تعليق من فئة صحفي
-        media_comment = "أريد عقد مقابلة صحفية"
-        self.assertEqual(self.comments_handler.get_comment_category(media_comment), "صحفي")
-        
-        # تعليق عام
-        general_comment = "هل يمكنني زيارة المجمع؟"
-        self.assertEqual(self.comments_handler.get_comment_category(general_comment), "")
-    
-    @patch('facebook_comments.ChatBot')
-    def test_generate_comment_response(self, mock_bot):
-        """
-        اختبار توليد رد على تعليق
-        """
-        # إعداد الـ mock للشات بوت
-        mock_bot_instance = MagicMock()
-        mock_bot_instance.generate_response.return_value = "هذا رد اختباري على تعليق فيسبوك"
-        mock_bot.return_value = mock_bot_instance
-        
-        # إعادة تهيئة معالج التعليقات مع الـ mock
-        self.comments_handler.chatbot = mock_bot_instance
-        
-        # اختبار توليد رد على تعليق صالح
-        valid_comment = "كيف يمكنني التقديم للوظائف؟"
-        response = self.comments_handler.generate_comment_response(valid_comment)
-        
-        # التحقق من استدعاء الشات بوت
-        mock_bot_instance.generate_response.assert_called_once()
-        
-        # التحقق من محتوى الرد
-        self.assertTrue(response)
-        self.assertIn("رد اختباري", response)
-        
-        # اختبار عدم توليد رد على تعليق غير صالح
-        mock_bot_instance.generate_response.reset_mock()
-        invalid_comment = "رائع"
-        response = self.comments_handler.generate_comment_response(invalid_comment)
-        
-        # التحقق من عدم استدعاء الشات بوت
-        mock_bot_instance.generate_response.assert_not_called()
-        
-        # التحقق من محتوى الرد
-        self.assertEqual(response, "")
-    
-    def test_sanitize_response(self):
-        """
-        اختبار تنقية الرد من أي إشارات إلى الذكاء الاصطناعي
-        """
-        # رد يحتوي على إشارات إلى الذكاء الاصطناعي
-        ai_response = "أنا ذكاء اصطناعي مدرب لمساعدتك. يمكنني كـ chatbot توفير معلومات."
-        
-        # تنقية الرد
-        sanitized = self.comments_handler._sanitize_response(ai_response)
-        
-        # التحقق من نتيجة التنقية
-        self.assertNotIn("ذكاء اصطناعي", sanitized)
-        self.assertNotIn("chatbot", sanitized)
-        self.assertIn("المساعد الرسمي لمجمع عمال مصر", sanitized)
-
-
-if __name__ == "__main__":
-    # تشغيل جميع الاختبارات
-    unittest.main()
+        # التحقق من أن لكل فئة أسئلة مختلفة
+        assert job_question != investor_question

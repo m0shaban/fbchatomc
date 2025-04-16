@@ -9,6 +9,7 @@ import re
 import os
 import random
 import logging
+import datetime
 from typing import Dict, List, Tuple, Optional, Any
 from api import DeepSeekAPI
 from config import BOT_SETTINGS, APP_SETTINGS
@@ -811,7 +812,7 @@ class ChatBot:
         
         # تأكد من وجود سجل للمستخدم
         if user_id not in self.conversation_history:
-            self.conversation_history[user_id] = {}
+            self.conversation_history[user_id] = {"messages": []}
             
         if user_id not in self.conversation_state:
             self.conversation_state[user_id] = {"awaiting_name": True}
@@ -822,15 +823,40 @@ class ChatBot:
             if not self.conversation_state[user_id].get("name_asked", False):
                 logger.info(f"طلب اسم المستخدم {user_id} لأول مرة")
                 self.conversation_state[user_id]["name_asked"] = True
-                return random.choice(self.name_questions)
+                
+                # حفظ الرسالة في تاريخ المحادثة
+                current_time = datetime.datetime.now().isoformat()
+                name_question = random.choice(self.name_questions)
+                
+                if "messages" not in self.conversation_history[user_id]:
+                    self.conversation_history[user_id]["messages"] = []
+                    
+                self.conversation_history[user_id]["messages"].append({
+                    "timestamp": current_time,
+                    "message": user_message,
+                    "response": name_question
+                })
+                
+                return name_question
             else:
                 # إذا سألنا عن الاسم وهذه إجابة المستخدم
                 welcome_response = self._save_user_name(user_id, user_message)
                 logger.info(f"تم تخزين اسم المستخدم {user_id} والترحيب به")
                 self.conversation_state[user_id]["awaiting_name"] = False
+                
+                # حفظ الرسالة في تاريخ المحادثة
+                current_time = datetime.datetime.now().isoformat()
+                if "messages" not in self.conversation_history[user_id]:
+                    self.conversation_history[user_id]["messages"] = []
+                    
+                self.conversation_history[user_id]["messages"].append({
+                    "timestamp": current_time,
+                    "message": user_message,
+                    "response": welcome_response
+                })
+                
                 return welcome_response
         
-        # بقية الكود للتعامل مع الرسائل بعد معرفة الاسم
         # التحقق مما إذا كان هذا سؤالًا جديدًا أو استمرارًا للمحادثة
         if "awaiting_continuation" in self.conversation_state.get(user_id, {}):
             previous_state = self.conversation_state[user_id]
@@ -848,6 +874,18 @@ class ChatBot:
                     logger.info(f"المستخدم {user_id} اختار إنهاء المحادثة")
                     user_name = self._get_user_name(user_id)
                     farewell = f"شكراً لتواصلك معنا{'  يا ' + user_name if user_name else ''}! نتطلع إلى خدمتك مرة أخرى."
+                    
+                    # حفظ الرسالة في تاريخ المحادثة
+                    current_time = datetime.datetime.now().isoformat()
+                    if "messages" not in self.conversation_history[user_id]:
+                        self.conversation_history[user_id]["messages"] = []
+                        
+                    self.conversation_history[user_id]["messages"].append({
+                        "timestamp": current_time,
+                        "message": user_message,
+                        "response": farewell
+                    })
+                    
                     return farewell
         
         # التحقق مما إذا كانت الرسالة تطلب رابطاً لخدمة معينة
@@ -862,7 +900,20 @@ class ChatBot:
             if self.continue_conversation:
                 self.conversation_state[user_id]["awaiting_continuation"] = True
             
-            return self._format_response(response, user_message, user_id)
+            formatted_response = self._format_response(response, user_message, user_id)
+            
+            # حفظ الرسالة في تاريخ المحادثة
+            current_time = datetime.datetime.now().isoformat()
+            if "messages" not in self.conversation_history[user_id]:
+                self.conversation_history[user_id]["messages"] = []
+                
+            self.conversation_history[user_id]["messages"].append({
+                "timestamp": current_time,
+                "message": user_message,
+                "response": formatted_response
+            })
+            
+            return formatted_response
         
         # البحث في قاعدة المعرفة
         best_match, confidence = self.search_knowledge_base(user_message)
@@ -876,41 +927,109 @@ class ChatBot:
                 self.conversation_state[user_id]["awaiting_continuation"] = True
                 self.conversation_state[user_id]["last_question_id"] = best_match["id"]
             
-            return self._format_response(best_match["answer"], user_message, user_id)
+            formatted_response = self._format_response(best_match["answer"], user_message, user_id)
+            
+            # حفظ الرسالة في تاريخ المحادثة
+            current_time = datetime.datetime.now().isoformat()
+            if "messages" not in self.conversation_history[user_id]:
+                self.conversation_history[user_id]["messages"] = []
+                
+            self.conversation_history[user_id]["messages"].append({
+                "timestamp": current_time,
+                "message": user_message,
+                "response": formatted_response
+            })
+            
+            return formatted_response
         else:
             # إذا لم يجد تطابقاً جيداً، استخدم API لتوليد إجابة إبداعية
             try:
                 logger.info(f"استخدام API لتوليد إجابة للمستخدم {user_id}")
+                
                 # تخصيص الاستعلام ليتضمن اسم المستخدم إذا كان متوفرًا
                 user_name = self._get_user_name(user_id)
                 context = f"المستخدم اسمه: {user_name}. " if user_name else ""
                 context += f"الرسالة: {user_message}"
                 
-                api_response = self.api.generate_response(
-                    user_message, 
-                    user_category=self._detect_user_category(user_message),
-                    context=context,
-                    human_expressions=self.human_expressions,
-                    contact_info=self.contact_info
-                )
-                
-                # استخراج نص الرد من استجابة API
-                response_text = self.api.extract_response_text(api_response)
+                # محاولة استخدام API للحصول على إجابة
+                response_text = ""
+                try:
+                    api_response = self.api.generate_response(
+                        user_message, 
+                        user_category=self._detect_user_category(user_message),
+                        context=context,
+                        human_expressions=self.human_expressions,
+                        contact_info=self.contact_info
+                    )
+                    
+                    # استخراج نص الرد من استجابة API
+                    response_text = self.api.extract_response_text(api_response)
+                    
+                    # التحقق من وجود رسالة خطأ في الاستجابة
+                    if "error" in api_response or ("عذراً" in response_text and "مشكلة في الاتصال" in response_text):
+                        # استخدام آلية الاحتياط إذا فشل الاتصال بـ API
+                        logger.warning("فشل اتصال API - استخدام آلية احتياطية")
+                        raise Exception("فشل في الاتصال بـ API")
+                        
+                except Exception as api_error:
+                    logger.warning(f"فشل استدعاء API: {api_error} - استخدام قاعدة المعرفة المحلية")
+                    # البحث عن إجابة مناسبة في قاعدة البيانات المحلية بمعيار أقل صرامة
+                    fallback_match, _ = self.search_knowledge_base(user_message)
+                    
+                    if fallback_match:
+                        response_text = fallback_match["answer"]
+                        logger.info("تم استخدام إجابة من قاعدة المعرفة المحلية كآلية احتياطية")
+                    else:
+                        # استخدام إجابة من قائمة الردود الافتراضية في حالة فشل كل شيء
+                        default_responses = [
+                            f"مرحباً{' ' + user_name if user_name else ''}!\n\nنحن سعداء بالتواصل معك في مجمع عمال مصر. نوفر فرص عمل متنوعة في قطاعات مختلفة، وخدمات للمستثمرين والشركات.\n\nيمكنك الاطلاع على الخدمات المتاحة عبر موقعنا الرسمي: https://www.omalmisr.com/\n\n• *للتواصل المباشر*:\n📞 تليفون/واتساب: 01100901200\n✉️ بريد إلكتروني: info@omalmisr.com",
+                            f"أهلاً بك{' ' + user_name if user_name else ''}!\n\nيسعدنا استفسارك عن مجمع عمال مصر. نوفر خدمات متكاملة في مجالات التوظيف والاستثمار الصناعي والزراعي.\n\nيمكنك التقديم للوظائف من خلال: https://omalmisrservices.com/en/jobs\n\n• *للتواصل المباشر*:\n📞 تليفون/واتساب: 01100901200\n✉️ بريد إلكتروني: info@omalmisr.com",
+                            f"شكراً لتواصلك معنا{' يا ' + user_name if user_name else ''}!\n\nنعتذر عن التأخير في الرد. يمكنك الاطلاع على خدماتنا عبر موقعنا الرسمي أو التواصل المباشر معنا.\n\n• *للتواصل المباشر*:\n📞 تليفون/واتساب: 01100901200\n✉️ بريد إلكتروني: info@omalmisr.com\n🌐 الموقع الرسمي: https://www.omalmisr.com/"
+                        ]
+                        response_text = random.choice(default_responses)
+                        logger.info("تم استخدام رد افتراضي من القائمة المحددة مسبقاً")
                 
                 # حفظ حالة المحادثة
                 if self.continue_conversation:
                     self.conversation_state[user_id]["awaiting_continuation"] = True
                 
-                return self._format_response(response_text, user_message, user_id)
-            except Exception as e:
-                logger.error(f"خطأ في توليد الإجابة باستخدام API: {e}")
+                formatted_response = self._format_response(response_text, user_message, user_id)
                 
-                # إذا فشل استخدام API، استخدم رد افتراضي
+                # حفظ الرسالة في تاريخ المحادثة
+                current_time = datetime.datetime.now().isoformat()
+                if "messages" not in self.conversation_history[user_id]:
+                    self.conversation_history[user_id]["messages"] = []
+                    
+                self.conversation_history[user_id]["messages"].append({
+                    "timestamp": current_time,
+                    "message": user_message,
+                    "response": formatted_response
+                })
+                
+                return formatted_response
+                
+            except Exception as e:
+                logger.error(f"خطأ في توليد الإجابة: {e}")
+                
+                # إذا فشل كل شيء، استخدم رد افتراضي بسيط
                 user_name = self._get_user_name(user_id)
                 name_prefix = f" يا {user_name}" if user_name else ""
-                default_response = f"عذراً{name_prefix}، لم أتمكن من فهم سؤالك بشكل كامل. هل يمكنك إعادة صياغته أو توضيح ما تبحث عنه بالتحديد؟ أو يمكنك التواصل مباشرة معنا عبر معلومات الاتصال الموجودة في صفحتنا الرسمية."
+                default_response = f"أهلاً{name_prefix}!\n\nيسعدنا تواصلك مع مجمع عمال مصر. يمكنك زيارة موقعنا الرسمي للاطلاع على خدماتنا المتنوعة في مجالات التوظيف والاستثمار.\n\n• *للتواصل المباشر*:\n📞 تليفون/واتساب: 01100901200\n✉️ بريد إلكتروني: info@omalmisr.com\n🌐 الموقع الرسمي: https://www.omalmisr.com/\n\nهل يمكنني مساعدتك في شيء محدد؟"
                 
-                return self._format_response(default_response, user_message, user_id)
+                formatted_response = self._format_response(default_response, user_message, user_id)
+                
+                # حفظ الرسالة في تاريخ المحادثة
+                current_time = datetime.datetime.now().isoformat()
+                if "messages" not in self.conversation_history[user_id]:
+                    self.conversation_history[user_id]["messages"] = []
+                    
+                self.conversation_history[user_id]["messages"].append({
+                    "timestamp": current_time,
+                    "message": user_message,
+                    "response": formatted_response
+                })
+                
+                return formatted_response
     
     def generate_messenger_response(self, user_message: str, user_id: str = "") -> str:
         """

@@ -3,12 +3,12 @@
 يقوم بتحليل التعليقات والرد عليها وفقاً للقواعد المحددة
 """
 
+import os
 import re
 import json
-import logging
-import random
 import time
-import os
+import logging
+import shutil
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
 from config import BOT_SETTINGS, APP_SETTINGS, FACEBOOK_SETTINGS
@@ -151,7 +151,7 @@ class FacebookCommentsHandler:
             # نسخ احتياطي للملف القديم قبل إعادة التعيين
             if os.path.exists(self.analytics_file):
                 backup_file = f"{self.analytics_file}.backup.{int(time.time())}"
-                os.rename(self.analytics_file, backup_file)
+                shutil.move(self.analytics_file, backup_file)
                 logger.info(f"تم نسخ ملف الإحصائيات القديم احتياطياً إلى: {backup_file}")
             
             # إنشاء ملف إحصائيات جديد
