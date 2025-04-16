@@ -1,5 +1,5 @@
 """
-الشات بوت الرسمي لمجمع عمال مصر
+الشات بوت الرسمي لمجمع عمال مصر - محمد سلامة
 يقوم بالرد على استفسارات زوار صفحة مجمع عمال مصر على فيسبوك
 سواء عبر الماسنجر أو تعليقات المنشورات
 """
@@ -34,6 +34,7 @@ class ChatBot:
         :param data_file: مسار ملف البيانات بصيغة JSON
         :param api_key: مفتاح API لخدمة DeepSeek (اختياري)
         """
+        self.bot_name = "محمد سلامة"  # اسم الشات بوت
         self.data_file = data_file or BOT_SETTINGS.get("DATA_FILE", "data.json")
         self.prompts = []
         self.human_expressions = {}
@@ -54,8 +55,11 @@ class ChatBot:
         # تهيئة واجهة API
         self.api = DeepSeekAPI(api_key)
         
-        # تاريخ المحادثات السابقة (يمكن تطويره لحفظ سجل المحادثات)
+        # تاريخ المحادثات السابقة يتضمن الآن أسماء المستخدمين
         self.conversation_history = {}
+        
+        # حالة المحادثة الحالية
+        self.conversation_state = {}
         
         # تعيين مصدر المحادثة الحالي
         self.conversation_source = "messenger"  # messenger أو facebook_comment
@@ -70,7 +74,15 @@ class ChatBot:
             "هل أستطيع مساعدتك في شيء آخر؟"
         ]
         
-        logger.info(f"تم تهيئة ChatBot بنجاح. ملف البيانات: {self.data_file}")
+        # أسئلة للحصول على اسم المستخدم
+        self.name_questions = [
+            "مرحباً! أنا محمد سلامة، المساعد الرسمي لمجمع عمال مصر. ما هو اسمك الكريم؟",
+            "أهلاً وسهلاً! أنا محمد سلامة من مجمع عمال مصر. قبل أن نبدأ، ممكن أعرف اسم حضرتك؟",
+            "السلام عليكم! معك محمد سلامة من مجمع عمال مصر. يشرفني التعرف على اسمك الكريم.",
+            "مرحباً بك في مجمع عمال مصر! أنا محمد سلامة مساعدك الشخصي. ما هو اسمك؟"
+        ]
+        
+        logger.info(f"تم تهيئة ChatBot بنجاح. اسم الشات بوت: {self.bot_name}، ملف البيانات: {self.data_file}")
     
     def load_data(self) -> None:
         """
@@ -365,6 +377,96 @@ class ChatBot:
         # حساب معامل جاكارد: عدد الكلمات المشتركة / مجموع الكلمات الفريدة
         return len(common_words) / len(words1.union(words2))
     
+    def _is_asking_for_name(self, user_id: str) -> bool:
+        """
+        التحقق مما إذا كنا في مرحلة سؤال المستخدم عن اسمه
+        
+        :param user_id: معرف المستخدم
+        :return: True إذا كنا في مرحلة طلب الاسم
+        """
+        if user_id not in self.conversation_state:
+            self.conversation_state[user_id] = {"awaiting_name": True}
+            return True
+        
+        return self.conversation_state.get(user_id, {}).get("awaiting_name", False)
+    
+    def _save_user_name(self, user_id: str, user_message: str) -> str:
+        """
+        حفظ اسم المستخدم وإعادة رد ترحيبي
+        
+        :param user_id: معرف المستخدم
+        :param user_message: رسالة المستخدم (اسمه)
+        :return: رد ترحيبي
+        """
+        # استخراج الاسم من الرسالة
+        name = self._extract_name(user_message)
+        
+        # حفظ الاسم في تاريخ المحادثة
+        if user_id not in self.conversation_history:
+            self.conversation_history[user_id] = {}
+        
+        self.conversation_history[user_id]["user_name"] = name
+        
+        # تحديث حالة المحادثة
+        self.conversation_state[user_id]["awaiting_name"] = False
+        
+        logger.info(f"تم حفظ اسم المستخدم {user_id}: {name}")
+        
+        # إنشاء رد ترحيبي يتضمن اسم المستخدم
+        greetings = [
+            f"أهلاً بك يا {name}! أنا {self.bot_name} من مجمع عمال مصر. كيف يمكنني مساعدتك اليوم؟",
+            f"سعيد بالتعرف عليك يا {name}! أنا {self.bot_name}، المساعد الرسمي لمجمع عمال مصر. كيف أقدر أساعدك؟",
+            f"مرحباً {name}! شكراً لتواصلك معنا. أنا {self.bot_name} من مجمع عمال مصر. ما هو استفسارك؟",
+            f"أهلاً وسهلاً {name}! معك {self.bot_name} من مجمع عمال مصر. أنا هنا للرد على استفساراتك."
+        ]
+        
+        return random.choice(greetings)
+    
+    def _extract_name(self, message: str) -> str:
+        """
+        استخراج الاسم من رسالة المستخدم
+        
+        :param message: رسالة المستخدم
+        :return: الاسم المستخرج
+        """
+        # تنظيف الرسالة من كلمات المجاملة المعتادة
+        words_to_remove = [
+            "انا", "أنا", "اسمي", "إسمي", "اسم", "إسم", "يا", 
+            "سيد", "سيدة", "دكتور", "مهندس", "استاذ", "أستاذ"
+        ]
+        
+        message = message.strip()
+        
+        # حذف علامات الترقيم الشائعة
+        message = re.sub(r'[.!?,;:"\'،]', ' ', message)
+        
+        # استبدال الكلمات التي تريد حذفها بمسافة
+        for word in words_to_remove:
+            message = re.sub(r'\b' + re.escape(word) + r'\b', ' ', message, flags=re.IGNORECASE)
+        
+        # تنظيف المسافات المتعددة
+        message = re.sub(r'\s+', ' ', message).strip()
+        
+        # إذا كانت الرسالة فارغة بعد التنظيف
+        if not message:
+            return "صديقي العزيز"
+        
+        # إذا كانت الرسالة تحتوي على عدة كلمات، خذ أول كلمتين كحد أقصى
+        words = message.split()
+        if len(words) > 2:
+            return " ".join(words[:2])
+        
+        return message
+    
+    def _get_user_name(self, user_id: str) -> str:
+        """
+        الحصول على اسم المستخدم من تاريخ المحادثة
+        
+        :param user_id: معرف المستخدم
+        :return: اسم المستخدم أو نص فارغ إذا لم يكن متوفرًا
+        """
+        return self.conversation_history.get(user_id, {}).get("user_name", "")
+    
     def _format_response(self, answer: str, user_message: str = "", user_id: str = "") -> str:
         """
         تنسيق الرد ليبدو أكثر شخصية وتفاعلية
@@ -387,6 +489,21 @@ class ChatBot:
             positive = self._get_random_expression("positive_responses")
             if positive:
                 formatted_response = f"{positive} {formatted_response}"
+        
+        # إضافة اسم المستخدم إلى الرد إذا كان متوفرًا
+        user_name = self._get_user_name(user_id)
+        if user_name and random.random() < 0.7:  # 70% فرصة لاستخدام اسم المستخدم
+            # البحث عن نقاط مناسبة لإضافة اسم المستخدم
+            if "." in formatted_response:
+                # استبدال أول نقطة بنقطة متبوعة باسم المستخدم
+                formatted_response = formatted_response.replace(".", f". يا {user_name},", 1)
+            elif "\n" in formatted_response:
+                # إضافة اسم المستخدم بعد السطر الأول
+                lines = formatted_response.split("\n", 1)
+                formatted_response = f"{lines[0]} يا {user_name}\n{lines[1]}"
+            else:
+                # إضافة اسم المستخدم في بداية الرد
+                formatted_response = f"يا {user_name}, {formatted_response}"
         
         # محاولة تحديد فئة المستخدم وتخصيص الرد
         if user_message:
@@ -419,6 +536,10 @@ class ChatBot:
             continue_phrase = random.choice(self.continue_phrases)
             formatted_response = f"{formatted_response}\n\n{continue_phrase}"
         
+        # إضافة اسم الشات بوت للتوقيع أحياناً
+        if random.random() < 0.2:  # 20% فرصة لإضافة توقيع
+            formatted_response = f"{formatted_response}\n\nمع تحيات {self.bot_name} - المساعد الرسمي لمجمع عمال مصر"
+        
         return formatted_response
     
     def generate_response(self, user_message: str, user_id: str = "") -> str:
@@ -429,35 +550,51 @@ class ChatBot:
         :param user_id: معرف المستخدم (اختياري)
         :return: الرد المولد
         """
+        # التحقق مما إذا كنا نسأل المستخدم عن اسمه
+        if self._is_asking_for_name(user_id):
+            # إذا كانت هذه الرسالة الأولى، اسأل المستخدم عن اسمه
+            if user_id not in self.conversation_history:
+                logger.info(f"طلب اسم المستخدم {user_id}")
+                return random.choice(self.name_questions)
+            else:
+                # إذا كانت هذه الرسالة الثانية، احفظ اسم المستخدم
+                welcome_response = self._save_user_name(user_id, user_message)
+                logger.info(f"تم الترحيب بالمستخدم {user_id}")
+                return welcome_response
+        
         # التحقق مما إذا كان هذا سؤالًا جديدًا أو استمرارًا للمحادثة
         if user_id in self.conversation_history:
-            previous_state = self.conversation_history[user_id]
+            previous_state = self.conversation_state.get(user_id, {})
             
             # إذا كانت المحادثة السابقة في انتظار استجابة الاستمرار
             if previous_state.get("awaiting_continuation", False):
                 # تحديد ما إذا كان المستخدم يريد الاستمرار أم لا
                 if self._is_continuation_message(user_message):
                     # إعادة تعيين حالة الانتظار
-                    self.conversation_history[user_id]["awaiting_continuation"] = False
+                    self.conversation_state[user_id]["awaiting_continuation"] = False
                     # معالجة الرسالة كسؤال جديد
                     logger.info(f"المستخدم {user_id} اختار الاستمرار في المحادثة")
                 else:
                     # إنهاء المحادثة
                     logger.info(f"المستخدم {user_id} اختار إنهاء المحادثة")
-                    self.conversation_history.pop(user_id, None)
-                    return "شكراً لتواصلك معنا! نتطلع إلى خدمتك مرة أخرى."
+                    user_name = self._get_user_name(user_id)
+                    farewell = f"شكراً لتواصلك معنا{'  يا ' + user_name if user_name else ''}! نتطلع إلى خدمتك مرة أخرى."
+                    self.conversation_state.pop(user_id, None)
+                    return farewell
         
         # التحقق مما إذا كانت الرسالة تطلب رابطاً لخدمة معينة
         service_info = self._detect_service_request(user_message)
         if service_info and "link" in service_info:
             logger.info(f"تم إعادة توجيه المستخدم {user_id} إلى خدمة: {service_info.get('title', 'غير محدد')}")
-            response = f"{self._get_random_expression('positive_responses')} {service_info.get('description', '')}\n\n{service_info.get('link', '')}"
+            user_name = self._get_user_name(user_id)
+            name_prefix = f" يا {user_name}" if user_name else ""
+            response = f"{self._get_random_expression('positive_responses')}{name_prefix}! {service_info.get('description', '')}\n\n{service_info.get('link', '')}"
             
             # حفظ حالة المحادثة
             if self.continue_conversation:
-                if user_id not in self.conversation_history:
-                    self.conversation_history[user_id] = {}
-                self.conversation_history[user_id]["awaiting_continuation"] = True
+                if user_id not in self.conversation_state:
+                    self.conversation_state[user_id] = {}
+                self.conversation_state[user_id]["awaiting_continuation"] = True
             
             return self._format_response(response, user_message, user_id)
         
@@ -470,83 +607,48 @@ class ChatBot:
             
             # حفظ حالة المحادثة
             if self.continue_conversation:
-                if user_id not in self.conversation_history:
-                    self.conversation_history[user_id] = {}
-                self.conversation_history[user_id]["awaiting_continuation"] = True
-                self.conversation_history[user_id]["last_question_id"] = best_match["id"]
+                if user_id not in self.conversation_state:
+                    self.conversation_state[user_id] = {}
+                self.conversation_state[user_id]["awaiting_continuation"] = True
+                self.conversation_state[user_id]["last_question_id"] = best_match["id"]
             
             return self._format_response(best_match["answer"], user_message, user_id)
         else:
             # إذا لم يجد تطابقاً جيداً، استخدم API لتوليد إجابة إبداعية
             try:
                 logger.info(f"استخدام API لتوليد إجابة للمستخدم {user_id}")
-                api_response = self.api.generate_response(user_message)
+                # تخصيص الاستعلام ليتضمن اسم المستخدم إذا كان متوفرًا
+                user_name = self._get_user_name(user_id)
+                context = f"المستخدم اسمه: {user_name}. " if user_name else ""
+                context += f"الرسالة: {user_message}"
+                
+                api_response = self.api.generate_response(
+                    user_message, 
+                    user_category=self._detect_user_category(user_message),
+                    context=context,
+                    human_expressions=self.human_expressions,
+                    contact_info=self.contact_info
+                )
                 
                 # استخراج نص الرد من استجابة API
                 response_text = self.api.extract_response_text(api_response)
                 
                 # حفظ حالة المحادثة
                 if self.continue_conversation:
-                    if user_id not in self.conversation_history:
-                        self.conversation_history[user_id] = {}
-                    self.conversation_history[user_id]["awaiting_continuation"] = True
+                    if user_id not in self.conversation_state:
+                        self.conversation_state[user_id] = {}
+                    self.conversation_state[user_id]["awaiting_continuation"] = True
                 
                 return self._format_response(response_text, user_message, user_id)
             except Exception as e:
                 logger.error(f"خطأ في توليد الإجابة باستخدام API: {e}")
                 
                 # إذا فشل استخدام API، استخدم رد افتراضي
-                default_response = "عذراً، لم أتمكن من فهم سؤالك بشكل كامل. هل يمكنك إعادة صياغته أو توضيح ما تبحث عنه بالتحديد؟ أو يمكنك التواصل مباشرة معنا عبر معلومات الاتصال الموجودة في صفحتنا الرسمية."
+                user_name = self._get_user_name(user_id)
+                name_prefix = f" يا {user_name}" if user_name else ""
+                default_response = f"عذراً{name_prefix}، لم أتمكن من فهم سؤالك بشكل كامل. هل يمكنك إعادة صياغته أو توضيح ما تبحث عنه بالتحديد؟ أو يمكنك التواصل مباشرة معنا عبر معلومات الاتصال الموجودة في صفحتنا الرسمية."
                 
                 return self._format_response(default_response, user_message, user_id)
-    
-    def get_related_questions(self, question_id: int, count: int = 3) -> List[Dict]:
-        """
-        الحصول على أسئلة مشابهة اعتماداً على رقم السؤال
-        
-        :param question_id: رقم السؤال
-        :param count: عدد الأسئلة المراد الحصول عليها
-        :return: قائمة بالأسئلة المشابهة
-        """
-        # البحث عن السؤال الأصلي
-        original_question = None
-        for prompt in self.prompts:
-            if prompt["id"] == question_id:
-                original_question = prompt
-                break
-        
-        if not original_question:
-            logger.warning(f"لم يتم العثور على سؤال برقم {question_id}")
-            return []
-        
-        # قائمة لتخزين الأسئلة المشابهة مع درجة التشابه
-        related_with_score = []
-        
-        # البحث عن أسئلة مشابهة
-        for prompt in self.prompts:
-            if prompt["id"] != question_id:  # تخطي السؤال نفسه
-                score = self._calculate_similarity(original_question["question"], prompt["question"])
-                related_with_score.append((prompt, score))
-        
-        # ترتيب الأسئلة حسب درجة التشابه (تنازلياً)
-        related_with_score.sort(key=lambda x: x[1], reverse=True)
-        
-        # إعادة الأسئلة الأكثر تشابهاً
-        return [question for question, _ in related_with_score[:count]]
-    
-    def clear_conversation_history(self, user_id: str = None) -> None:
-        """
-        مسح تاريخ المحادثات لمستخدم معين أو لجميع المستخدمين
-        
-        :param user_id: معرف المستخدم (اختياري)
-        """
-        if user_id:
-            if user_id in self.conversation_history:
-                self.conversation_history.pop(user_id)
-                logger.info(f"تم مسح تاريخ المحادثة للمستخدم {user_id}")
-        else:
-            self.conversation_history.clear()
-            logger.info("تم مسح تاريخ المحادثة لجميع المستخدمين")
     
     def generate_messenger_response(self, user_message: str, user_id: str = "") -> str:
         """
@@ -559,24 +661,8 @@ class ChatBot:
         logger.info(f"توليد رد لماسنجر للمستخدم: {user_id}")
         self.set_conversation_source("messenger")
         
-        # البحث في قاعدة المعرفة
-        best_match, confidence = self.search_knowledge_base(user_message)
-        
-        if best_match and confidence >= self.similarity_threshold:
-            # إذا وجد تطابق جيد، عد الجواب المطابق
-            logger.info(f"تم العثور على إجابة للمستخدم {user_id} بثقة {confidence:.2f}")
-            return self._format_response(best_match["answer"], user_message, user_id)
-        else:
-            # استخدام API لتوليد إجابة إبداعية
-            try:
-                # استدعاء API مباشرة هنا للتأكد من أن الاختبارات تكتشف ذلك
-                api_response = self.api.generate_response(user_message)
-                response_text = self.api.extract_response_text(api_response)
-                return self._format_response(response_text, user_message, user_id)
-            except Exception as e:
-                logger.error(f"خطأ في توليد الإجابة باستخدام API: {e}")
-                default_response = "عذراً، لم أتمكن من فهم سؤالك بشكل كامل. هل يمكنك إعادة صياغته؟"
-                return self._format_response(default_response, user_message, user_id)
+        # استدعاء الدالة الرئيسية لتوليد الرد
+        return self.generate_response(user_message, user_id)
     
     def generate_comment_response(self, user_message: str, user_id: str = "") -> str:
         """
@@ -589,24 +675,12 @@ class ChatBot:
         logger.info(f"توليد رد لتعليق فيسبوك للمستخدم: {user_id}")
         self.set_conversation_source("facebook_comment")
         
-        # البحث في قاعدة المعرفة
-        best_match, confidence = self.search_knowledge_base(user_message)
+        # استدعاء الدالة الرئيسية لتوليد الرد، لكن بدون سؤال الاسم في التعليقات العامة
+        # نحدد أولاً ما إذا كنا سنتخطى مرحلة سؤال الاسم
+        if user_id not in self.conversation_state:
+            self.conversation_state[user_id] = {"awaiting_name": False}
         
-        if best_match and confidence >= self.similarity_threshold:
-            # إذا وجد تطابق جيد، عد الجواب المطابق
-            logger.info(f"تم العثور على إجابة للمستخدم {user_id} بثقة {confidence:.2f}")
-            return self._format_response(best_match["answer"], user_message, user_id)
-        else:
-            # استخدام API لتوليد إجابة إبداعية
-            try:
-                # استدعاء API مباشرة هنا للتأكد من أن الاختبارات تكتشف ذلك
-                api_response = self.api.generate_response(user_message)
-                response_text = self.api.extract_response_text(api_response)
-                return self._format_response(response_text, user_message, user_id)
-            except Exception as e:
-                logger.error(f"خطأ في توليد الإجابة باستخدام API: {e}")
-                default_response = "عذراً، لم أتمكن من فهم استفسارك بشكل كامل. هل يمكنك توضيح ما تحتاجه بخصوص مجمع عمال مصر؟"
-                return self._format_response(default_response, user_message, user_id)
+        return self.generate_response(user_message, user_id)
     
     def save_conversation_history(self, filename: str) -> bool:
         """
