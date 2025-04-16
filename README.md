@@ -1,106 +1,100 @@
 # شات بوت مجمع عمال مصر
 
-<div dir="rtl">
-
-## نظرة عامة
-
-هذا المشروع عبارة عن شات بوت متخصص لمجمع عمال مصر، يوفر ردود آلية على استفسارات المستخدمين عبر الماسنجر والتعليقات على منشورات الفيسبوك. يقدم الشات بوت معلومات عن خدمات المجمع، فرص العمل، برامج التدريب، وفرص الاستثمار.
+نظام ذكي للرد على استفسارات زوار صفحة مجمع عمال مصر على فيسبوك سواء عبر الماسنجر أو تعليقات المنشورات.
 
 ## المميزات
 
-- الرد التلقائي على رسائل الماسنجر والتعليقات على منشورات الفيسبوك
-- نظام تحليل المحادثات وتوليد التقارير والإحصائيات
-- واجهة برمجة تطبيقات (API) مرنة للتكامل مع أنظمة أخرى
-- لوحة تحكم لمراقبة أداء الشات بوت
-- دعم كامل للغة العربية
-- إمكانية تخصيص الردود حسب فئات المستخدمين
+- الرد التلقائي على تعليقات الفيسبوك
+- التعامل مع رسائل الماسنجر 
+- تصنيف المستخدمين حسب الفئة (باحث عن عمل، مستثمر، صحفي، إلخ)
+- تحليل الاستفسارات وتوجيه المستخدم للخدمة المناسبة
+- نظام إحصائيات متكامل لمتابعة أداء النظام
+- تنقية الردود من أي إشارات للذكاء الاصطناعي
+- معالجة متقدمة للغة العربية
 
-## متطلبات التشغيل
+## المتطلبات
 
-- Python 3.11 أو أحدث
-- قاعدة بيانات للمحادثات (اختياري: SQL/NoSQL)
-- وصول لواجهة برمجة تطبيقات فيسبوك
-- مفتاح API لنموذج الذكاء الاصطناعي
+- Python 3.8+
+- وصول إلى DeepSeek API
+- وصول إلى Facebook Graph API (للاستخدام في الإنتاج)
 
-## طريقة الإعداد
+## التثبيت
 
-1. استنساخ المستودع:
-   ```
-   git clone https://github.com/username/fbchatomc.git
-   cd fbchatomc
-   ```
-
-2. إنشاء بيئة افتراضية وتفعيلها:
-   ```
-   python -m venv venv
-   source venv/bin/activate  # للينكس/ماك
-   venv\Scripts\activate     # للويندوز
-   ```
-
-3. تثبيت المكتبات المطلوبة:
-   ```
-   pip install -r requirements.txt
-   ```
-
-4. إنشاء ملف `.env` وتعبئته بالمتغيرات البيئية اللازمة:
-   ```
-   DEEPSEEK_API_KEY=your_api_key
-   PORT=5000
-   DEBUG=False
-   ```
-
-5. تشغيل الخادم:
-   ```
-   python server.py
-   ```
-
-## تحليل أداء الشات بوت
-
-يتضمن المشروع نظام تحليلات متقدم يوفر:
-
-- إحصائيات المحادثات اليومية والأسبوعية والشهرية
-- تحليل المواضيع الأكثر تداولًا
-- توزيع المستخدمين حسب الفئات والاهتمامات
-- رسومات بيانية توضح أنماط استخدام الشات بوت
-- مقاييس أداء الشات بوت ونسبة الرضا
-
-## النشر على منصات الاستضافة
-
-يمكن نشر المشروع على:
-
-- **Render.com**: باستخدام ملف `render.yaml` المرفق
-- **Railway.app**: باستخدام ملف `railway.json` المرفق
-
-## هيكل المشروع
-
-```
-fbchatomc/
-├── analytics.py           # نظام تحليل المحادثات والتقارير
-├── api.py                 # واجهة برمجة التطبيقات
-├── bot.py                 # منطق الشات بوت الأساسي
-├── config.py              # إعدادات التكوين
-├── data.json              # بيانات الأسئلة والإجابات
-├── facebook_comments.py   # معالجة تعليقات فيسبوك
-├── Procfile               # ملف تكوين النشر
-├── railway.json           # تكوين Railway.app
-├── render.yaml            # تكوين Render.com
-├── requirements.txt       # المكتبات المطلوبة
-├── runtime.txt            # إصدار بايثون
-└── server.py              # خادم الويب
+1. نسخ المستودع:
+```bash
+git clone https://github.com/username/fbchatomc.git
+cd fbchatomc
 ```
 
-## المساهمة في المشروع
+2. تثبيت المتطلبات:
+```bash
+pip install -r requirements.txt
+```
 
-نرحب بمساهماتكم في تطوير هذا المشروع. يمكنكم:
+3. إنشاء ملف `.env` وتعديل الإعدادات حسب متطلباتك:
+```
+# إعدادات API
+DEEPSEEK_API_KEY=your_deepseek_api_key_here
+DEEPSEEK_API_URL=https://api.deepseek.com/v1/chat/completions
+DEFAULT_MODEL=deepseek-chat
+MAX_TOKENS=1000
+TEMPERATURE=0.7
 
-1. عمل Fork للمستودع
-2. إنشاء فرع جديد للميزة التي ترغبون في إضافتها `git checkout -b feature/amazing-feature`
-3. إجراء التعديلات والالتزام بها `git commit -m 'إضافة ميزة جديدة'`
-4. رفع التغييرات `git push origin feature/amazing-feature`
-5. فتح طلب دمج (Pull Request)
+# إعدادات الشات بوت
+DATA_FILE=data.json
+LOG_FILE=logs/chatbot.log
+SIMILARITY_THRESHOLD=0.4
+PERSONALIZE_RESPONSE=True
+SAVE_CONVERSATIONS=True
+CONVERSATIONS_DIR=conversations
+
+# إعدادات فيسبوك
+FB_PAGE_TOKEN=your_page_access_token_here
+FB_VERIFY_TOKEN=your_verify_token
+FB_APP_SECRET=your_app_secret_here
+FB_PAGE_ID=your_page_id_here
+FB_IGNORE_PRAISE=True
+FB_COMMENT_LENGTH=3
+
+# إعدادات الويب سيرفر
+SERVER_HOST=0.0.0.0
+SERVER_PORT=5000
+WEBHOOK_ROUTE=/webhook
+
+# إعدادات التطبيق
+DEBUG_MODE=False
+LOG_LEVEL=INFO
+ENVIRONMENT=development
+```
+
+## الاستخدام
+
+### تشغيل معالج تعليقات الفيسبوك
+```bash
+python facebook_comments.py
+```
+
+### تشغيل واجهة API
+```bash
+python server.py
+```
+
+### عرض الإحصائيات
+```bash
+python analytics.py --charts
+```
+
+## الهيكل العام للمشروع
+
+- `bot.py`: المكون الرئيسي للشات بوت
+- `api.py`: واجهة للاتصال مع DeepSeek API
+- `config.py`: إعدادات التطبيق
+- `facebook_comments.py`: معالج تعليقات الفيسبوك
+- `server.py`: خادم الويب للتعامل مع webhook
+- `analytics.py`: أدوات تحليل وعرض الإحصائيات
+- `data.json`: قاعدة البيانات المعرفية للشات بوت
+- `test_chatbot.py`: اختبارات آلية للشات بوت
 
 ## الترخيص
 
-هذا المشروع مرخص بموجب [ترخيص MIT](LICENSE)
-
-</div>
+جميع الحقوق محفوظة © لمجمع عمال مصر
