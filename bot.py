@@ -550,21 +550,33 @@ class ChatBot:
         :param user_id: معرف المستخدم (اختياري)
         :return: الرد المولد
         """
-        # التحقق مما إذا كنا نسأل المستخدم عن اسمه
-        if self._is_asking_for_name(user_id):
-            # إذا كانت هذه الرسالة الأولى، اسأل المستخدم عن اسمه
-            if user_id not in self.conversation_history:
-                logger.info(f"طلب اسم المستخدم {user_id}")
+        logger.info(f"معالجة رسالة من المستخدم {user_id}: {user_message[:30]}...")
+        
+        # تأكد من وجود سجل للمستخدم
+        if user_id not in self.conversation_history:
+            self.conversation_history[user_id] = {}
+            
+        if user_id not in self.conversation_state:
+            self.conversation_state[user_id] = {"awaiting_name": True}
+        
+        # التحقق مما إذا كنا نسأل المستخدم عن اسمه لأول مرة
+        if self.conversation_state[user_id].get("awaiting_name", True):
+            # إذا كانت الرسالة الأولى ولم نسأل عن الاسم بعد
+            if not self.conversation_state[user_id].get("name_asked", False):
+                logger.info(f"طلب اسم المستخدم {user_id} لأول مرة")
+                self.conversation_state[user_id]["name_asked"] = True
                 return random.choice(self.name_questions)
             else:
-                # إذا كانت هذه الرسالة الثانية، احفظ اسم المستخدم
+                # إذا سألنا عن الاسم وهذه إجابة المستخدم
                 welcome_response = self._save_user_name(user_id, user_message)
-                logger.info(f"تم الترحيب بالمستخدم {user_id}")
+                logger.info(f"تم تخزين اسم المستخدم {user_id} والترحيب به")
+                self.conversation_state[user_id]["awaiting_name"] = False
                 return welcome_response
         
+        # بقية الكود للتعامل مع الرسائل بعد معرفة الاسم
         # التحقق مما إذا كان هذا سؤالًا جديدًا أو استمرارًا للمحادثة
-        if user_id in self.conversation_history:
-            previous_state = self.conversation_state.get(user_id, {})
+        if "awaiting_continuation" in self.conversation_state.get(user_id, {}):
+            previous_state = self.conversation_state[user_id]
             
             # إذا كانت المحادثة السابقة في انتظار استجابة الاستمرار
             if previous_state.get("awaiting_continuation", False):
@@ -579,7 +591,6 @@ class ChatBot:
                     logger.info(f"المستخدم {user_id} اختار إنهاء المحادثة")
                     user_name = self._get_user_name(user_id)
                     farewell = f"شكراً لتواصلك معنا{'  يا ' + user_name if user_name else ''}! نتطلع إلى خدمتك مرة أخرى."
-                    self.conversation_state.pop(user_id, None)
                     return farewell
         
         # التحقق مما إذا كانت الرسالة تطلب رابطاً لخدمة معينة
@@ -592,8 +603,6 @@ class ChatBot:
             
             # حفظ حالة المحادثة
             if self.continue_conversation:
-                if user_id not in self.conversation_state:
-                    self.conversation_state[user_id] = {}
                 self.conversation_state[user_id]["awaiting_continuation"] = True
             
             return self._format_response(response, user_message, user_id)
@@ -607,8 +616,6 @@ class ChatBot:
             
             # حفظ حالة المحادثة
             if self.continue_conversation:
-                if user_id not in self.conversation_state:
-                    self.conversation_state[user_id] = {}
                 self.conversation_state[user_id]["awaiting_continuation"] = True
                 self.conversation_state[user_id]["last_question_id"] = best_match["id"]
             
@@ -635,8 +642,6 @@ class ChatBot:
                 
                 # حفظ حالة المحادثة
                 if self.continue_conversation:
-                    if user_id not in self.conversation_state:
-                        self.conversation_state[user_id] = {}
                     self.conversation_state[user_id]["awaiting_continuation"] = True
                 
                 return self._format_response(response_text, user_message, user_id)
