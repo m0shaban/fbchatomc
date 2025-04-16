@@ -10,3 +10,21 @@ services:
         value: 3.11.6
       - key: DEEPSEEK_API_KEY
         sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: DEFAULT_MODEL
+        value: deepseek-chat
+      - key: MAX_TOKENS
+        value: 1000
+      - key: TEMPERATURE
+        value: 0.7
+      - key: FB_PAGE_TOKEN
+        sync: false
+      - key: FB_VERIFY_TOKEN
+        sync: false
+      - key: FB_APP_SECRET
+        sync: false
+      - key: FB_PAGE_ID
+        sync: false
+      - key: PORT
+        value: 8080

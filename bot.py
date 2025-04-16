@@ -55,10 +55,20 @@ class ChatBot:
         self.api = DeepSeekAPI(api_key)
         
         # تاريخ المحادثات السابقة (يمكن تطويره لحفظ سجل المحادثات)
-        self.conversation_history = []
+        self.conversation_history = {}
         
         # تعيين مصدر المحادثة الحالي
         self.conversation_source = "messenger"  # messenger أو facebook_comment
+
+        # إعدادات الاستمرارية في المحادثة
+        self.continue_conversation = BOT_SETTINGS.get("CONTINUE_CONVERSATION", True)
+        self.continue_phrases = [
+            "هل تحتاج مزيداً من المعلومات؟",
+            "هل لديك أسئلة أخرى؟",
+            "هل ترغب في معرفة المزيد؟",
+            "هل تريد الاستمرار في المحادثة؟",
+            "هل أستطيع مساعدتك في شيء آخر؟"
+        ]
         
         logger.info(f"تم تهيئة ChatBot بنجاح. ملف البيانات: {self.data_file}")
     
@@ -272,6 +282,43 @@ class ChatBot:
         logger.debug("لم يتم تحديد طلب خدمة محدد")
         return {}
     
+    def _is_continuation_message(self, message: str) -> bool:
+        """
+        تحديد ما إذا كانت الرسالة استجابة للاستمرار في المحادثة
+        
+        :param message: رسالة المستخدم
+        :return: True إذا كانت الرسالة تشير إلى الاستمرار، False إذا كانت تشير إلى الإنهاء
+        """
+        # كلمات مفتاحية تشير إلى الاستمرار
+        continue_keywords = [
+            "نعم", "أيوة", "اه", "أكيد", "استمر", "أكمل", "طبعا", "بالتأكيد", "حابب", "عايز", 
+            "أيوه", "حاضر", "تمام", "موافق", "ممكن", "مزيد", "المزيد"
+        ]
+        
+        # كلمات مفتاحية تشير إلى الإنهاء
+        end_keywords = [
+            "لا", "شكرا", "خلاص", "كفاية", "متشكر", "ممنون", "إنهاء", "انهاء", "كفى", 
+            "كده تمام", "هذا كل شيء", "مش عايز"
+        ]
+        
+        message = message.strip().lower()
+        
+        # التحقق من كلمات الاستمرار
+        for keyword in continue_keywords:
+            if keyword in message:
+                logger.debug(f"تم تحديد رسالة استمرار: {message}")
+                return True
+        
+        # التحقق من كلمات الإنهاء
+        for keyword in end_keywords:
+            if keyword in message:
+                logger.debug(f"تم تحديد رسالة إنهاء: {message}")
+                return False
+        
+        # إذا لم يتم تحديد النية بوضوح، افترض أنها استمرار (الرسالة تحتوي على سؤال جديد)
+        logger.debug(f"لم يتم تحديد نية الاستمرار بوضوح، اعتبارها سؤال جديد: {message}")
+        return True
+    
     def search_knowledge_base(self, user_message: str) -> Tuple[Optional[Dict], float]:
         """
         البحث في قاعدة المعرفة عن أقرب سؤال للرسالة المستلمة
@@ -316,375 +363,184 @@ class ChatBot:
             return 0.0
         
         # حساب معامل جاكارد: عدد الكلمات المشتركة / مجموع الكلمات الفريدة
-        similarity = len(common_words) / len(words1.union(words2))
-        
-        return similarity
+        return len(common_words) / len(words1.union(words2))
     
-    def needs_human_contact(self, message: str) -> bool:
+    def _format_response(self, answer: str, user_message: str = "", user_id: str = "") -> str:
         """
-        تحديد ما إذا كانت الرسالة تتطلب تواصل بشري
+        تنسيق الرد ليبدو أكثر شخصية وتفاعلية
         
-        :param message: رسالة المستخدم
-        :return: True إذا كانت الرسالة تتطلب تواصل بشري
+        :param answer: الرد الأساسي
+        :param user_message: رسالة المستخدم
+        :param user_id: معرف المستخدم (اختياري)
+        :return: الرد المنسق
         """
-        message = message.lower()
+        formatted_response = answer
         
-        # التحقق من وجود أي من الكلمات المفتاحية التي تتطلب تواصل بشري
-        for keyword in self.requires_human_contact:
-            if keyword.lower() in message:
-                logger.info(f"تم تحديد حاجة للتواصل البشري بناءً على الكلمة المفتاحية: {keyword}")
-                return True
+        # إضافة تعبير ترحيبي أحياناً
+        if random.random() < 0.3:  # 30% فرصة لإضافة تعبير ترحيبي
+            greeting = self._get_random_expression("greetings")
+            if greeting:
+                formatted_response = f"{greeting}\n\n{formatted_response}"
         
-        return False
+        # إضافة تعبير إيجابي أحياناً
+        if random.random() < 0.3:  # 30% فرصة لإضافة تعبير إيجابي
+            positive = self._get_random_expression("positive_responses")
+            if positive:
+                formatted_response = f"{positive} {formatted_response}"
+        
+        # محاولة تحديد فئة المستخدم وتخصيص الرد
+        if user_message:
+            user_category = self._detect_user_category(user_message)
+            
+            if user_category == "باحث عن عمل" and random.random() < 0.5:
+                job_response = self._get_random_expression("job_seekers_response")
+                if job_response:
+                    formatted_response = f"{job_response}\n\n{formatted_response}"
+            
+            if user_category == "مستثمر" and random.random() < 0.5:
+                investor_response = self._get_random_expression("investors_response")
+                if investor_response:
+                    formatted_response = f"{investor_response}\n\n{formatted_response}"
+        
+        # إضافة تأكيد في النهاية أحياناً
+        if random.random() < 0.3:  # 30% فرصة لإضافة تأكيد
+            assurance = self._get_random_expression("assurances")
+            if assurance:
+                formatted_response = f"{formatted_response}\n\n{assurance}"
+        
+        # إضافة خاتمة أحياناً
+        if not self.continue_conversation and random.random() < 0.5:  # 50% فرصة لإضافة خاتمة إذا لم يكن هناك سؤال للاستمرار
+            conclusion = self._get_random_expression("conclusions")
+            if conclusion:
+                formatted_response = f"{formatted_response}\n\n{conclusion}"
+        
+        # إضافة سؤال الاستمرار إذا كانت الميزة مفعلة
+        if self.continue_conversation:
+            continue_phrase = random.choice(self.continue_phrases)
+            formatted_response = f"{formatted_response}\n\n{continue_phrase}"
+        
+        return formatted_response
     
-    def get_human_contact_message(self) -> str:
+    def generate_response(self, user_message: str, user_id: str = "") -> str:
         """
-        إنشاء رسالة للتواصل البشري بأسلوب ودي
-        
-        :return: رسالة التواصل البشري
-        """
-        phone = self.contact_info.get("phone", "01012345678")
-        
-        # قائمة من الرسائل المختلفة للتواصل البشري
-        contact_messages = [
-            f"للتواصل معنا مباشرة، يُرجى الاتصال على الرقم: {phone}",
-            f"إذا حابب تتواصل مباشرة مع أحد ممثلينا، راسلنا أو اتصل على: {phone}",
-            f"تقدر تتواصل مباشرة مع فريقنا على الرقم: {phone}",
-            f"للتواصل المباشر مع أحد مستشارينا الآن، اتصل على: {phone}",
-            f"حابب تحكي مع شخص من فريقنا؟ تواصل معنا على: {phone}"
-        ]
-        
-        # اختيار رسالة عشوائية
-        contact_message = f"\n\n{random.choice(contact_messages)}"
-        logger.debug(f"تم إنشاء رسالة التواصل البشري: {contact_message}")
-        return contact_message
-    
-    def generate_service_link_message(self, service_info: Dict) -> str:
-        """
-        إنشاء رسالة تحتوي على رابط الخدمة المطلوبة
-        
-        :param service_info: معلومات الخدمة المطلوبة
-        :return: رسالة مع رابط الخدمة
-        """
-        if not service_info:
-            return ""
-        
-        title = service_info.get("title", "")
-        description = service_info.get("description", "")
-        link = service_info.get("link", "")
-        
-        if not link:
-            return ""
-        
-        # اختيار تعبير عشوائي مناسب
-        intro = self._get_random_expression("positive_responses") or "بكل تأكيد!"
-        
-        # إنشاء رسالة مخصصة حسب نوع الخدمة
-        if "تقديم السيرة الذاتية" in title or "jobs" in link:
-            response = f"{intro} يمكنك تقديم السيرة الذاتية والتقدم للوظائف عبر الرابط التالي:\n{link}\n\nهذه المنصة تتيح لك تسجيل بياناتك ومؤهلاتك وخبراتك، وستتلقى إشعاراً عند توفر وظائف تناسب مهاراتك."
-        
-        elif "البحث عن عمال" in title or "workers" in link:
-            response = f"{intro} إذا كنت تبحث عن عمال مؤهلين لمنشأتك، يمكنك الاستفادة من خدمة توفير العمالة المدربة عبر الرابط التالي:\n{link}\n\nيمكنك تحديد احتياجاتك من العمالة والمهارات المطلوبة، وسيقوم فريقنا بتوفير الكوادر المناسبة."
-        
-        elif "خدمات الشركات" in title or "companies" in link:
-            response = f"{intro} يمكنك الاطلاع على الخدمات المتكاملة التي نقدمها للشركات والمستثمرين عبر الرابط التالي:\n{link}\n\nنقدم خدمات الاستثمار الصناعي والزراعي، دراسات الجدوى الاقتصادية، الشراكات الاستراتيجية، العقارات الصناعية، والعديد من الخدمات الأخرى."
-        
-        elif "فض المنازعات" in title or "dispute" in link:
-            response = f"{intro} يمكنك الاستفادة من بوابة فض المنازعات الإلكترونية عبر الرابط التالي:\n{link}\n\nهذه البوابة متخصصة في حل وتسوية المنازعات الناشئة بين المنشآت أو بين المنشآت والعاملين بها، من خلال خبراء ومستشارين قانونيين دون اللجوء للجهات القضائية."
-        
-        else:
-            response = f"{intro} يمكنك زيارة الرابط التالي للاطلاع على {title}:\n{link}\n\n{description}"
-        
-        logger.debug(f"تم إنشاء رسالة رابط الخدمة: {title}")
-        return response
-    
-    def format_greeting_by_source(self) -> str:
-        """
-        إنشاء تحية مناسبة بناءً على مصدر المحادثة (ماسنجر أو تعليق فيسبوك)
-        
-        :return: رسالة التحية المناسبة
-        """
-        greeting = ""
-        
-        if self.conversation_source == "messenger":
-            # تحية بداية محادثة ماسنجر
-            messenger_greeting = self._get_random_expression("greetings") or "مرحباً بك في الصفحة الرسمية لمجمع عمال مصر!"
-            greeting = f"{messenger_greeting} أنا المساعد الرسمي للمجمع. كيف يمكنني خدمتك اليوم؟"
-        else:
-            # تحية أقصر لتعليقات الفيسبوك
-            comment_greeting = "مرحباً، أنا المساعد الرسمي لمجمع عمال مصر."
-            greeting = comment_greeting
-        
-        return greeting
-    
-    def sanitize_response(self, response: str) -> str:
-        """
-        تنقية الرد من أي إشارات للذكاء الاصطناعي
-        
-        :param response: الرد الأصلي
-        :return: الرد بعد التنقية
-        """
-        # قائمة بالعبارات التي يجب استبدالها
-        ai_terms = [
-            "ذكاء اصطناعي", "روبوت", "بوت", "AI", "bot", "شات بوت", "chatbot", 
-            "نموذج لغوي", "language model", "assistant", "مساعد آلي"
-        ]
-        
-        sanitized_response = response
-        
-        # استبدال أي إشارة للذكاء الاصطناعي
-        for term in ai_terms:
-            sanitized_response = re.sub(
-                r'\b' + re.escape(term) + r'\b', 
-                "المساعد الرسمي لمجمع عمال مصر", 
-                sanitized_response, 
-                flags=re.IGNORECASE
-            )
-        
-        return sanitized_response
-    
-    def generate_messenger_response(self, user_message: str) -> str:
-        """
-        توليد رد لرسالة ماسنجر
+        توليد رد على رسالة المستخدم
         
         :param user_message: رسالة المستخدم
-        :return: الرد المُولد
+        :param user_id: معرف المستخدم (اختياري)
+        :return: الرد المولد
         """
-        # تعيين مصدر المحادثة كماسنجر
-        self.conversation_source = "messenger"
+        # التحقق مما إذا كان هذا سؤالًا جديدًا أو استمرارًا للمحادثة
+        if user_id in self.conversation_history:
+            previous_state = self.conversation_history[user_id]
+            
+            # إذا كانت المحادثة السابقة في انتظار استجابة الاستمرار
+            if previous_state.get("awaiting_continuation", False):
+                # تحديد ما إذا كان المستخدم يريد الاستمرار أم لا
+                if self._is_continuation_message(user_message):
+                    # إعادة تعيين حالة الانتظار
+                    self.conversation_history[user_id]["awaiting_continuation"] = False
+                    # معالجة الرسالة كسؤال جديد
+                    logger.info(f"المستخدم {user_id} اختار الاستمرار في المحادثة")
+                else:
+                    # إنهاء المحادثة
+                    logger.info(f"المستخدم {user_id} اختار إنهاء المحادثة")
+                    self.conversation_history.pop(user_id, None)
+                    return "شكراً لتواصلك معنا! نتطلع إلى خدمتك مرة أخرى."
         
-        # توليد الرد العام
-        response = self.generate_response(user_message)
-        
-        # تخصيص الرد للماسنجر
-        # إضافة تحية ترحيبية إذا كانت أول رسالة في المحادثة
-        if len(self.conversation_history) <= 2:  # الرسالة الأولى + الرد عليها
-            greeting = self.format_greeting_by_source()
-            if not response.startswith(greeting) and not any(expr in response for expr in self.human_expressions.get("greetings", [])):
-                response = f"{greeting}\n\n{response}"
-        
-        return response
-    
-    def generate_comment_response(self, comment_text: str) -> str:
-        """
-        توليد رد لتعليق فيسبوك
-        
-        :param comment_text: نص التعليق
-        :return: الرد المُولد
-        """
-        # تعيين مصدر المحادثة كتعليق فيسبوك
-        self.conversation_source = "facebook_comment"
-        
-        # توليد الرد العام
-        response = self.generate_response(comment_text)
-        
-        # تخصيص الرد لتعليقات الفيسبوك (أكثر اختصاراً)
-        # إضافة تحية قصيرة في بداية الرد
-        greeting = self.format_greeting_by_source()
-        if not response.startswith(greeting) and not any(expr in response for expr in self.human_expressions.get("greetings", [])):
-            response = f"{greeting}\n\n{response}"
-        
-        # التأكد من أن الرد لا يشير إلى أنه ذكاء اصطناعي
-        response = self.sanitize_response(response)
-        
-        return response
-    
-    def generate_response(self, user_message: str) -> str:
-        """
-        توليد رد على رسالة المستخدم بأسلوب المساعد الرسمي لمجمع عمال مصر
-        
-        :param user_message: رسالة المستخدم
-        :return: الرد المُولد
-        """
-        # إضافة رسالة المستخدم إلى تاريخ المحادثة
-        self.conversation_history.append({"role": "user", "message": user_message})
-        logger.info(f"استلام رسالة من المستخدم ({self.conversation_source}): {user_message[:50]}...")
-        
-        # محاولة تحديد فئة المستخدم
-        user_category = self._detect_user_category(user_message)
-        
-        # البحث عن طلب خدمة محددة تحتاج لرابط
+        # التحقق مما إذا كانت الرسالة تطلب رابطاً لخدمة معينة
         service_info = self._detect_service_request(user_message)
-        
-        # إذا كان المستخدم يطلب خدمة محددة، قم بإرجاع رابط الخدمة مباشرة
         if service_info and "link" in service_info:
-            service_link_message = self.generate_service_link_message(service_info)
-            if service_link_message:
-                # إضافة رسالة التواصل البشري إذا لزم الأمر
-                if self.needs_human_contact(user_message):
-                    service_link_message += self.get_human_contact_message()
-                
-                # إضافة رد البوت إلى تاريخ المحادثة
-                self.conversation_history.append({"role": "bot", "message": service_link_message})
-                logger.info(f"إرسال رد خدمة مباشر: {service_info.get('title', '')}")
-                return service_link_message
+            logger.info(f"تم إعادة توجيه المستخدم {user_id} إلى خدمة: {service_info.get('title', 'غير محدد')}")
+            response = f"{self._get_random_expression('positive_responses')} {service_info.get('description', '')}\n\n{service_info.get('link', '')}"
+            
+            # حفظ حالة المحادثة
+            if self.continue_conversation:
+                if user_id not in self.conversation_history:
+                    self.conversation_history[user_id] = {}
+                self.conversation_history[user_id]["awaiting_continuation"] = True
+            
+            return self._format_response(response, user_message, user_id)
         
         # البحث في قاعدة المعرفة
-        best_match, score = self.search_knowledge_base(user_message)
+        best_match, confidence = self.search_knowledge_base(user_message)
         
-        # حفظ السياق للنموذج اللغوي
-        context = ""
-        final_response = ""
-        
-        # اختيار تعبير ترحيبي مناسب لفئة المستخدم
-        greeting = ""
-        if user_category == "باحث عن عمل":
-            greeting = self._get_random_expression("job_seekers_response") or ""
-        elif user_category == "مستثمر":
-            greeting = self._get_random_expression("investors_response") or ""
+        if best_match and confidence >= self.similarity_threshold:
+            # إذا وجد تطابق جيد، عد الجواب المطابق
+            logger.info(f"تم العثور على إجابة للمستخدم {user_id} بثقة {confidence:.2f}")
+            
+            # حفظ حالة المحادثة
+            if self.continue_conversation:
+                if user_id not in self.conversation_history:
+                    self.conversation_history[user_id] = {}
+                self.conversation_history[user_id]["awaiting_continuation"] = True
+                self.conversation_history[user_id]["last_question_id"] = best_match["id"]
+            
+            return self._format_response(best_match["answer"], user_message, user_id)
         else:
-            # إذا لم يتم تحديد فئة، استخدم تعبير ترحيبي عام
-            if random.random() < 0.5:  # 50% فرصة لإضافة تعبير ترحيبي
-                greeting = self._get_random_expression("greetings") or ""
-        
-        # تحديد نوع الرد بناءً على نسبة التطابق
-        if best_match and score > self.similarity_threshold:
-            # إضافة أفضل تطابق للسياق
-            context = f"سؤال مشابه: {best_match['question']}\nإجابة نموذجية: {best_match['answer']}"
-            logger.debug(f"تم العثور على تطابق جيد (نسبة: {score:.2f}). السؤال: {best_match['question'][:50]}...")
-            
-            # إضافة معلومات الخدمة المطلوبة إلى السياق إن وجدت
-            if service_info:
-                context += f"\n\nالمستخدم قد يحتاج معلومات عن: {service_info.get('title', '')}"
-                if 'description' in service_info:
-                    context += f"\nوصف الخدمة: {service_info['description']}"
-                if 'link' in service_info:
-                    context += f"\nرابط الخدمة: {service_info['link']}"
-            
-            # إضافة معلومات عن مصدر المحادثة
-            context += f"\n\nمصدر المحادثة: {self.conversation_source}"
-            
-            # استخدام النموذج اللغوي مع السياق المناسب
-            api_response = self.api.generate_response(
-                user_message,
-                user_category,
-                context,
-                self.human_expressions,
-                self.contact_info
-            )
-            final_response = self.api.extract_response_text(api_response)
-        else:
-            logger.debug(f"لم يتم العثور على تطابق جيد (أفضل نسبة: {score:.2f})")
-            # إذا لم يكن هناك تطابق جيد، استخدم فقط النموذج اللغوي
-            # ولكن أضف بعض المعلومات العامة من قاعدة البيانات كسياق
-            sample_info = ""
-            if self.prompts and len(self.prompts) > 2:
-                # اختيار ثلاثة أسئلة عشوائية من قاعدة المعرفة لتوفير معلومات عامة عن المجمع
-                random_samples = random.sample(self.prompts, min(3, len(self.prompts)))
-                for sample in random_samples:
-                    sample_info += f"معلومة: {sample['question']} - {sample['answer']}\n"
+            # إذا لم يجد تطابقاً جيداً، استخدم API لتوليد إجابة إبداعية
+            try:
+                logger.info(f"استخدام API لتوليد إجابة للمستخدم {user_id}")
+                api_response = self.api.generate_response(user_message)
                 
-                context = f"معلومات عامة عن مجمع عمال مصر يمكن الاستفادة منها:\n{sample_info}"
+                # حفظ حالة المحادثة
+                if self.continue_conversation:
+                    if user_id not in self.conversation_history:
+                        self.conversation_history[user_id] = {}
+                    self.conversation_history[user_id]["awaiting_continuation"] = True
                 
-                # إضافة معلومات الخدمة المطلوبة إلى السياق إن وجدت
-                if service_info:
-                    context += f"\n\nالمستخدم قد يحتاج معلومات عن: {service_info.get('title', '')}"
-                    if 'description' in service_info:
-                        context += f"\nوصف الخدمة: {service_info['description']}"
-                    if 'link' in service_info:
-                        context += f"\nرابط الخدمة: {service_info['link']}"
+                return self._format_response(api_response, user_message, user_id)
+            except Exception as e:
+                logger.error(f"خطأ في توليد الإجابة باستخدام API: {e}")
                 
-                # إضافة معلومات عن مصدر المحادثة
-                context += f"\n\nمصدر المحادثة: {self.conversation_source}"
-            
-            # استخدام النموذج اللغوي لتوليد رد
-            api_response = self.api.generate_response(
-                user_message,
-                user_category,
-                context,
-                self.human_expressions,
-                self.contact_info
-            )
-            final_response = self.api.extract_response_text(api_response)
-        
-        # إذا كان الرد لا يحتوي على الرابط المطلوب، أضفه للرد
-        if service_info and 'link' in service_info and service_info['link'] not in final_response:
-            additional_info = f"\n\nيمكنك زيارة الرابط التالي للمزيد من المعلومات: {service_info['link']}"
-            final_response += additional_info
-            logger.debug(f"تمت إضافة الرابط المفقود: {service_info['link']}")
-        
-        # إضافة رسالة التواصل البشري إذا لزم الأمر
-        if self.needs_human_contact(user_message) and "اتصل على" not in final_response and "تواصل" not in final_response:
-            final_response += self.get_human_contact_message()
-            logger.debug("تمت إضافة معلومات التواصل البشري للرد")
-        
-        # التأكد من أن الرد لا يشير إلى أن المجيب هو ذكاء اصطناعي
-        final_response = self.sanitize_response(final_response)
-        
-        # إضافة رد البوت إلى تاريخ المحادثة
-        self.conversation_history.append({"role": "bot", "message": final_response})
-        logger.info(f"تم إرسال رد بطول: {len(final_response)} حرف")
-        
-        return final_response
+                # إذا فشل استخدام API، استخدم رد افتراضي
+                default_response = "عذراً، لم أتمكن من فهم سؤالك بشكل كامل. هل يمكنك إعادة صياغته أو توضيح ما تبحث عنه بالتحديد؟ أو يمكنك التواصل مباشرة معنا عبر معلومات الاتصال الموجودة في صفحتنا الرسمية."
+                
+                return self._format_response(default_response, user_message, user_id)
     
-    def save_conversation_history(self, filename: str = "conversations.json") -> bool:
+    def get_related_questions(self, question_id: int, count: int = 3) -> List[Dict]:
         """
-        حفظ تاريخ المحادثة في ملف JSON
+        الحصول على أسئلة مشابهة اعتماداً على رقم السؤال
         
-        :param filename: اسم الملف
-        :return: True إذا تم الحفظ بنجاح
+        :param question_id: رقم السؤال
+        :param count: عدد الأسئلة المراد الحصول عليها
+        :return: قائمة بالأسئلة المشابهة
         """
-        try:
-            with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(self.conversation_history, f, ensure_ascii=False, indent=4)
-            logger.info(f"تم حفظ تاريخ المحادثة بنجاح في الملف: {filename}")
-            return True
-        except Exception as e:
-            logger.error(f"خطأ في حفظ تاريخ المحادثة: {e}")
-            return False
-
-
-# نموذج لاستخدام المساعد الرسمي لمجمع عمال مصر
-def main():
-    """
-    دالة رئيسية تعرض كيفية استخدام المساعد الرسمي لمجمع عمال مصر
-    """
-    print("جاري تهيئة المساعد الرسمي لمجمع عمال مصر...")
-    
-    # إنشاء كائن من المساعد الرسمي
-    bot = ChatBot()
-    
-    # طلب نوع الخدمة: ماسنجر أو تعليقات
-    service_type = input("اختر نوع الخدمة (1: ماسنجر، 2: تعليقات فيسبوك): ")
-    
-    if service_type == "2":
-        bot.set_conversation_source("facebook_comment")
-        print("\nوضع معالجة تعليقات الفيسبوك")
-    else:
-        bot.set_conversation_source("messenger")
-        print("\nوضع الماسنجر")
-    
-    # استخدام تعبير ترحيبي مناسب
-    greeting = bot.format_greeting_by_source()
-    print(f"\n{greeting}")
-    
-    if bot.conversation_source == "messenger":
-        print("كيف يمكنني خدمتك اليوم؟")
-    
-    print("(اكتب 'خروج' للخروج)")
-    
-    while True:
-        # استقبال رسالة المستخدم
-        user_input = input("\nأنت: ")
+        # البحث عن السؤال الأصلي
+        original_question = None
+        for prompt in self.prompts:
+            if prompt["id"] == question_id:
+                original_question = prompt
+                break
         
-        # التحقق من الخروج
-        if user_input.lower() in ['خروج', 'exit', 'quit']:
-            conclusion = bot._get_random_expression("conclusions") or "شكرًا لتواصلك مع مجمع عمال مصر. نتشرف بخدمتك دائماً!"
-            print(f"\nالمساعد الرسمي: {conclusion}")
-            
-            # حفظ تاريخ المحادثة قبل الخروج
-            bot.save_conversation_history()
-            break
+        if not original_question:
+            logger.warning(f"لم يتم العثور على سؤال برقم {question_id}")
+            return []
         
-        # توليد الرد حسب نوع الخدمة
-        if bot.conversation_source == "messenger":
-            response = bot.generate_messenger_response(user_input)
+        # قائمة لتخزين الأسئلة المشابهة مع درجة التشابه
+        related_with_score = []
+        
+        # البحث عن أسئلة مشابهة
+        for prompt in self.prompts:
+            if prompt["id"] != question_id:  # تخطي السؤال نفسه
+                score = self._calculate_similarity(original_question["question"], prompt["question"])
+                related_with_score.append((prompt, score))
+        
+        # ترتيب الأسئلة حسب درجة التشابه (تنازلياً)
+        related_with_score.sort(key=lambda x: x[1], reverse=True)
+        
+        # إعادة الأسئلة الأكثر تشابهاً
+        return [question for question, _ in related_with_score[:count]]
+    
+    def clear_conversation_history(self, user_id: str = None) -> None:
+        """
+        مسح تاريخ المحادثات لمستخدم معين أو لجميع المستخدمين
+        
+        :param user_id: معرف المستخدم (اختياري)
+        """
+        if user_id:
+            if user_id in self.conversation_history:
+                self.conversation_history.pop(user_id)
+                logger.info(f"تم مسح تاريخ المحادثة للمستخدم {user_id}")
         else:
-            response = bot.generate_comment_response(user_input)
-        
-        # عرض الرد
-        print(f"\nالمساعد الرسمي: {response}")
-
-
-if __name__ == "__main__":
-    main()
+            self.conversation_history.clear()
+            logger.info("تم مسح تاريخ المحادثة لجميع المستخدمين")
