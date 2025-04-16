@@ -544,3 +544,15 @@ class ChatBot:
         else:
             self.conversation_history.clear()
             logger.info("تم مسح تاريخ المحادثة لجميع المستخدمين")
+    
+    def generate_messenger_response(self, user_message: str, user_id: str = "") -> str:
+        """
+        توليد رد على رسالة المستخدم في ماسنجر
+        
+        :param user_message: رسالة المستخدم
+        :param user_id: معرف المستخدم (اختياري)
+        :return: الرد المولد
+        """
+        logger.info(f"توليد رد لماسنجر للمستخدم: {user_id}")
+        self.set_conversation_source("messenger")
+        return self.generate_response(user_message, user_id)
