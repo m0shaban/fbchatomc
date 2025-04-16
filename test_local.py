@@ -122,7 +122,8 @@ def main():
             
             # الحصول على رد من الشات بوت
             try:
-                response = bot.generate_response(user_input, user_id)
+                # تغيير استدعاء دالة توليد الرد لاستخدام الدالة الصحيحة وترتيب المعلمات الصحيح
+                response = bot.generate_messenger_response(user_id, user_input)
                 print_response(response)
             except Exception as e:
                 print(f"\n🤵 محمد: عذراً، حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى. ({e})")
