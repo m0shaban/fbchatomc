@@ -268,6 +268,9 @@ class ChatBot:
             }
         }
         
+        # حالة التحقق من كلمة المرور للمطور
+        self.dev_auth_state = {}
+        
         logger.info(f"تم تهيئة ChatBot بنجاح. اسم الشات بوت: {self.bot_name}، ملف البيانات: {self.data_file}")
     
     def load_data(self) -> None:
@@ -482,6 +485,11 @@ class ChatBot:
         """
         self.set_conversation_source("messenger")
         
+        # التحقق من تدفق المصادقة التفاعلي للمطور
+        auth_response = self.handle_developer_auth(user_id, message)
+        if auth_response:
+            return auth_response
+        
         # التحقق من كلمة السر للمهندس محمد شعبان
         if message.strip() == "افتح يا سمسم انا محمد شعبان":
             response = self._generate_special_developer_message()
@@ -672,6 +680,49 @@ class ChatBot:
             
             return default_response
     
+    def handle_developer_auth(self, user_id: str, message: str) -> Optional[str]:
+        """
+        معالجة تدفق المصادقة التفاعلي للمطور
+        
+        :param user_id: معرف المستخدم
+        :param message: رسالة المستخدم
+        :return: رد المصادقة أو None إذا لم تكن جزءًا من تدفق المصادقة
+        """
+        # إذا لم تكن هناك حالة مصادقة للمستخدم، نقوم بتهيئتها
+        if user_id not in self.dev_auth_state:
+            self.dev_auth_state[user_id] = {"step": 0, "timestamp": datetime.datetime.now().isoformat()}
+        
+        # الخطوة 0: المستخدم يدخل "افتح يا سمسم"
+        if self.dev_auth_state[user_id]["step"] == 0:
+            if message.strip() == "افتح يا سمسم":
+                self.dev_auth_state[user_id]["step"] = 1
+                return "من أنت؟"
+            return None
+        
+        # الخطوة 1: المستخدم يدخل اسمه
+        elif self.dev_auth_state[user_id]["step"] == 1:
+            if message.strip() in ["محمد شعبان", "محمد", "شعبان", "المهندس محمد شعبان", "م محمد شعبان", "م/محمد شعبان"]:
+                self.dev_auth_state[user_id]["step"] = 2
+                return "احلف"
+            else:
+                # إعادة تعيين حالة المصادقة إذا كان الاسم غير صحيح
+                self.dev_auth_state[user_id] = {"step": 0, "timestamp": datetime.datetime.now().isoformat()}
+                return "عفواً، لا يمكنني التعرف عليك. يرجى المحاولة مرة أخرى."
+        
+        # الخطوة 2: المستخدم يحلف
+        elif self.dev_auth_state[user_id]["step"] == 2:
+            if message.strip() in ["والله", "اقسم بالله", "والله العظيم", "أقسم", "اقسم"]:
+                # تأكيد المصادقة ومسح حالة المصادقة لبدء وضع المطور
+                self.dev_auth_state[user_id] = {"step": 0, "timestamp": datetime.datetime.now().isoformat()}
+                self._last_dev_auth = True
+                return "أمان خلاص صدقتك\n\n" + self._generate_special_developer_message()
+            else:
+                # إعادة تعيين حالة المصادقة إذا كان القسم غير صحيح
+                self.dev_auth_state[user_id] = {"step": 0, "timestamp": datetime.datetime.now().isoformat()}
+                return "عفواً، يبدو أنك لست المطور الحقيقي. يرجى المحاولة مرة أخرى."
+        
+        return None
+
     def _filter_ai_references(self, text: str) -> str:
         """
         تنقية النص من أي إشارات للذكاء الاصطناعي
