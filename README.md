@@ -1,37 +1,37 @@
-# شات بوت مجمع عمال مصر
+# شات بوت مجمع عمال مصر - محمد سلامة
 
-نظام ذكي للرد على استفسارات زوار صفحة مجمع عمال مصر على فيسبوك سواء عبر الماسنجر أو تعليقات المنشورات.
+هذا المشروع عبارة عن شات بوت ذكي لمجمع عمال مصر، يعمل على منصة فيسبوك ماسنجر ويوفر خدمات معلوماتية وتفاعلية للمستخدمين.
 
-## المميزات
+## الميزات الرئيسية
 
-- الرد التلقائي على تعليقات الفيسبوك
-- التعامل مع رسائل الماسنجر 
-- تصنيف المستخدمين حسب الفئة (باحث عن عمل، مستثمر، صحفي، إلخ)
-- تحليل الاستفسارات وتوجيه المستخدم للخدمة المناسبة
-- نظام إحصائيات متكامل لمتابعة أداء النظام
-- تنقية الردود من أي إشارات للذكاء الاصطناعي
-- معالجة متقدمة للغة العربية
+- ✅ دعم كامل للغة العربية
+- ✅ واجهة ماسنجر فيسبوك تفاعلية مع أزرار وقوائم
+- ✅ إجابات ذكية على استفسارات المستخدمين
+- ✅ قائمة خدمات تفاعلية
+- ✅ آلية احتياطية للردود المحلية عند فشل الاتصال بواجهة الذكاء الاصطناعي
+- ✅ واجهة اختبار محلية لتجربة الشات بوت قبل النشر
 
-## المتطلبات
+## متطلبات التشغيل
 
-- Python 3.8+
-- وصول إلى DeepSeek API
-- وصول إلى Facebook Graph API (للاستخدام في الإنتاج)
+- Python 3.8 أو أحدث
+- مفتاح API من DeepSeek أو OpenAI
+- حساب فيسبوك وصفحة فيسبوك للأعمال
+- توكن وصول للصفحة من فيسبوك
 
-## التثبيت
+## طريقة التثبيت
 
-1. نسخ المستودع:
-```bash
-git clone https://github.com/username/fbchatomc.git
+1. استنساخ المستودع:
+```
+git clone https://github.com/yourusername/fbchatomc.git
 cd fbchatomc
 ```
 
-2. تثبيت المتطلبات:
-```bash
+2. تثبيت المكتبات المطلوبة:
+```
 pip install -r requirements.txt
 ```
 
-3. إنشاء ملف `.env` وتعديل الإعدادات حسب متطلباتك:
+3. إنشاء ملف `.env` بالإعدادات المطلوبة:
 ```
 # إعدادات API
 DEEPSEEK_API_KEY=your_deepseek_api_key_here
@@ -40,61 +40,36 @@ DEFAULT_MODEL=deepseek-chat
 MAX_TOKENS=1000
 TEMPERATURE=0.7
 
-# إعدادات الشات بوت
-DATA_FILE=data.json
-LOG_FILE=logs/chatbot.log
-SIMILARITY_THRESHOLD=0.4
-PERSONALIZE_RESPONSE=True
-SAVE_CONVERSATIONS=True
-CONVERSATIONS_DIR=conversations
-
 # إعدادات فيسبوك
 FB_PAGE_TOKEN=your_page_access_token_here
-FB_VERIFY_TOKEN=your_verify_token
+FB_VERIFY_TOKEN=omc_verify_token
 FB_APP_SECRET=your_app_secret_here
 FB_PAGE_ID=your_page_id_here
-FB_IGNORE_PRAISE=True
-FB_COMMENT_LENGTH=3
 
 # إعدادات الويب سيرفر
 SERVER_HOST=0.0.0.0
 SERVER_PORT=5000
 WEBHOOK_ROUTE=/webhook
-
-# إعدادات التطبيق
-DEBUG_MODE=False
-LOG_LEVEL=INFO
-ENVIRONMENT=development
 ```
 
-## الاستخدام
+## طريقة التشغيل
 
-### تشغيل معالج تعليقات الفيسبوك
-```bash
-python facebook_comments.py
+### اختبار محلي
+
+لاختبار الشات بوت محلياً بدون فيسبوك:
+
+```
+python test_local.py
 ```
 
-### تشغيل واجهة API
-```bash
+### تشغيل الخادم
+
+لتشغيل خادم الشات بوت الذي يتفاعل مع ويب هوك فيسبوك:
+
+```
 python server.py
 ```
 
-### عرض الإحصائيات
-```bash
-python analytics.py --charts
-```
+## الرخصة
 
-## الهيكل العام للمشروع
-
-- `bot.py`: المكون الرئيسي للشات بوت
-- `api.py`: واجهة للاتصال مع DeepSeek API
-- `config.py`: إعدادات التطبيق
-- `facebook_comments.py`: معالج تعليقات الفيسبوك
-- `server.py`: خادم الويب للتعامل مع webhook
-- `analytics.py`: أدوات تحليل وعرض الإحصائيات
-- `data.json`: قاعدة البيانات المعرفية للشات بوت
-- `test_chatbot.py`: اختبارات آلية للشات بوت
-
-## الترخيص
-
-جميع الحقوق محفوظة © لمجمع عمال مصر
+جميع الحقوق محفوظة &copy; 2025 مجمع عمال مصر

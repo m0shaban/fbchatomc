@@ -399,31 +399,16 @@ class ChatBot:
                 if "submenu" in item:
                     return self.generate_menu_buttons(menu_type="submenu", submenu_key=key)
                 else:
-                    # إذا لم يكن هناك قائمة فرعية، أعد معلومات عن الخدمة نفسها
-                    response = f"📌 {item['title']}\n\n"
-                    response += f"{item['description']}\n\n"
-                    response += f"للتسجيل: {item['link']}\n\n"
-                    response += "للعودة للقائمة الرئيسية، اكتب 'القائمة الرئيسية'."
-                    return response
+                    service_info = f"📋 {item['title']}\n\n{item['description']}\n\n🔗 الرابط: {item['link']}"
+                    return service_info
         
         # البحث في القوائم الفرعية
         for main_key, main_item in self.main_menu.items():
             if "submenu" in main_item:
                 for sub_key, sub_item in main_item["submenu"].items():
                     if user_message in [sub_key.lower(), sub_item["title"].lower()]:
-                        response = f"📌 {sub_item['title']}\n\n"
-                        response += f"{sub_item['description']}\n\n"
-                        
-                        if "links" in sub_item:
-                            response += "روابط منصات التواصل الاجتماعي:\n"
-                            for platform, link in sub_item["links"].items():
-                                response += f"- {platform}: {link}\n"
-                        else:
-                            response += f"للتسجيل: {sub_item['link']}\n\n"
-                        
-                        response += f"\nللعودة لقائمة {main_item['title']}، اكتب '{main_item['title']}'.\n"
-                        response += "للعودة للقائمة الرئيسية، اكتب 'القائمة الرئيسية'."
-                        return response
+                        service_info = f"📋 {sub_item['title']}\n\n{sub_item['description']}\n\n🔗 الرابط: {sub_item['link']}"
+                        return service_info
         
         # البحث في القائمة باستخدام كلمات مفتاحية
         keywords_map = {
@@ -477,16 +462,12 @@ class ChatBot:
         for keyword, menu_key in keywords_map.items():
             if keyword in user_message:
                 if menu_key in self.main_menu:
-                    # إذا كانت كلمة مفتاحية لقائمة رئيسية
-                    if "submenu" in self.main_menu[menu_key]:
+                    item = self.main_menu[menu_key]
+                    if "submenu" in item:
                         return self.generate_menu_buttons(menu_type="submenu", submenu_key=menu_key)
                     else:
-                        item = self.main_menu[menu_key]
-                        response = f"📌 {item['title']}\n\n"
-                        response += f"{item['description']}\n\n"
-                        response += f"للتسجيل: {item['link']}\n\n"
-                        response += "للعودة للقائمة الرئيسية، اكتب 'القائمة الرئيسية'."
-                        return response
+                        service_info = f"📋 {item['title']}\n\n{item['description']}\n\n🔗 الرابط: {item['link']}"
+                        return service_info
         
         # لم يتم العثور على طلب قائمة
         return None

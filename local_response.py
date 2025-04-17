@@ -12,7 +12,7 @@ import datetime
 import subprocess
 import logging
 import re
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List
 
 from bot import ChatBot
 from config import BOT_SETTINGS, APP_SETTINGS, init
@@ -133,21 +133,109 @@ def load_data_file(data_file: str = "data.json") -> Dict:
         print(f"خطأ في تحميل ملف البيانات: {e}")
         return {}
 
-def get_company_info(data_file: str = "data.json") -> str:
+def match_keywords(message: str, keywords: List[str]) -> bool:
     """
-    الحصول على معلومات عن مجمع عمال مصر
+    التحقق مما إذا كانت أي من الكلمات المفتاحية موجودة في الرسالة
     
-    :param data_file: مسار ملف البيانات
+    :param message: الرسالة المراد فحصها
+    :param keywords: قائمة الكلمات المفتاحية
+    :return: True إذا تم العثور على تطابق
+    """
+    message = message.lower()
+    for keyword in keywords:
+        if keyword.lower() in message:
+            return True
+    return False
+
+def search_faq(user_message: str, data: Dict) -> Tuple[Optional[str], float]:
+    """
+    البحث عن إجابة في قائمة الأسئلة الشائعة
+    
+    :param user_message: رسالة المستخدم
+    :param data: بيانات المجمع
+    :return: زوج من الإجابة ودرجة الثقة
+    """
+    prompts = data.get("prompts", [])
+    best_match = None
+    best_confidence = 0.0
+    
+    user_message = user_message.lower()
+    
+    for prompt in prompts:
+        question = prompt.get("question", "").lower()
+        answer = prompt.get("answer", "")
+        
+        # البحث عن كلمات متطابقة
+        question_words = set(re.findall(r'\b\w+\b', question))
+        message_words = set(re.findall(r'\b\w+\b', user_message))
+        
+        if not question_words:
+            continue
+        
+        # حساب درجة التطابق
+        common_words = question_words.intersection(message_words)
+        
+        if len(common_words) > 0:
+            confidence = len(common_words) / len(question_words)
+            
+            # زيادة الثقة إذا كانت هناك تطابقات دقيقة
+            if question in user_message:
+                confidence += 0.3
+            
+            # تحديث أفضل تطابق
+            if confidence > best_confidence:
+                best_confidence = confidence
+                best_match = answer
+    
+    return best_match, best_confidence
+
+def get_contact_info(data: Dict) -> str:
+    """
+    استخراج معلومات الاتصال بالمجمع
+    
+    :param data: بيانات المجمع
+    :return: نص معلومات الاتصال
+    """
+    contact_info = data.get("contact_info", {})
+    
+    contact_text = "للتواصل معنا:\n"
+    
+    phone = contact_info.get("phone")
+    if phone:
+        contact_text += f"📞 هاتف: {phone}\n"
+    
+    whatsapp = contact_info.get("whatsapp", {}).get("main_office")
+    if whatsapp:
+        contact_text += f"📱 واتساب: {whatsapp}\n"
+    
+    email = contact_info.get("email")
+    if email:
+        contact_text += f"📧 بريد إلكتروني: {email}\n"
+    
+    website = contact_info.get("website")
+    if website:
+        contact_text += f"🌐 الموقع الإلكتروني: {website}\n"
+    
+    facebook = contact_info.get("social_media", {}).get("facebook")
+    if facebook:
+        contact_text += f"👍 فيسبوك: {facebook}\n"
+    
+    return contact_text
+
+def get_company_info(data: Dict) -> str:
+    """
+    استخراج معلومات عامة عن مجمع عمال مصر
+    
+    :param data: بيانات المجمع
     :return: نص المعلومات
     """
-    data = load_data_file(data_file)
-    
-    # البحث عن السؤال المتعلق بالمعلومات العامة عن المجمع
+    prompts = data.get("prompts", [])
     about_company = ""
     leadership = ""
     projects = ""
     
-    for prompt in data.get("prompts", []):
+    # البحث عن المعلومات ذات الصلة
+    for prompt in prompts:
         if prompt.get("id") == 1:  # ما هو مجمع عمال مصر؟
             about_company = prompt.get("answer", "")
         elif prompt.get("id") == 2:  # من يدير المجمع؟
@@ -156,63 +244,76 @@ def get_company_info(data_file: str = "data.json") -> str:
             projects = prompt.get("answer", "")
     
     # تجميع المعلومات في رد شامل
-    return f"""معلومات عن مجمع عمال مصر:
+    response = "معلومات عن مجمع عمال مصر:\n\n"
+    
+    if about_company:
+        response += f"● نبذة عن المجمع:\n{about_company}\n\n"
+    
+    if leadership:
+        response += f"● قيادة المجمع:\n{leadership}\n\n"
+    
+    if projects:
+        response += f"● أبرز المشروعات:\n{projects}\n\n"
+    
+    # إضافة معلومات الاتصال
+    response += get_contact_info(data)
+    
+    return response
 
-• *نبذة عن المجمع*:
-{about_company}
-
-• *قيادة المجمع*:
-{leadership}
-
-• *أبرز المشروعات*:
-{projects}
-
-يمكنك زيارة موقعنا الرسمي للحصول على معلومات أكثر تفصيلاً: https://www.omalmisr.com/
-أو التواصل معنا مباشرة عبر:
-📞 تليفون/واتساب: {data.get("contact_info", {}).get("whatsapp", {}).get("main_office", "01100901200")}
-✉️ البريد الإلكتروني: {data.get("contact_info", {}).get("email", "info@omalmisr.com")}
-"""
-
-def handle_local_response(user_message: str, data_file: str = "data.json") -> Tuple[str, bool]:
+def handle_local_response(user_message: str, data_file: str = None) -> Tuple[Optional[str], float]:
     """
-    التعامل مع الاستجابات المحلية للأسئلة المحددة
+    معالجة رسالة المستخدم محلياً بدون استخدام API
     
     :param user_message: رسالة المستخدم
-    :param data_file: مسار ملف البيانات
-    :return: زوج من الرد ومؤشر يحدد ما إذا تم العثور على رد محلي
+    :param data_file: مسار ملف البيانات (اختياري)
+    :return: زوج من الرد ودرجة الثقة
     """
-    user_message = user_message.lower().strip()
+    data_file = data_file or BOT_SETTINGS.get("DATA_FILE", "data.json")
+    data = load_data_file(data_file)
+    if not data:
+        return None, 0.0
     
-    # قائمة من أنماط الأسئلة وردودها
-    local_patterns = [
-        (
-            r'(معلومات|ايه|إيه|شنو|ما هي|ماهي|ما هو|ماهو|اعرف|أعرف).*?(شركة|شركه|المجمع|مجمع|المؤسسة|مؤسسة|مؤسسه)',
-            get_company_info(data_file)
-        ),
-        (
-            r'(مين|من|من هو|منهو).*?(صاحب|مالك|رئيس|مدير|يدير).*?(الشركة|الشركه|المجمع|مجمع)',
-            lambda: load_data_file(data_file).get("prompts", [])[1].get("answer", "") if len(load_data_file(data_file).get("prompts", [])) > 1 else ""
-        ),
-        (
-            r'(نشاط|نشاطات|فعاليات|مشاريع|مشروعات|إنجازات|انجازات).*?(الشركة|الشركه|المجمع|مجمع)',
-            lambda: load_data_file(data_file).get("prompts", [])[2].get("answer", "") if len(load_data_file(data_file).get("prompts", [])) > 2 else ""
-        ),
-        (
-            r'(أين|اين|فين|وين|مكان|موقع|عنوان|مقر).*?(الشركة|الشركه|المجمع|مجمع)',
-            lambda: load_data_file(data_file).get("prompts", [])[9].get("answer", "") if len(load_data_file(data_file).get("prompts", [])) > 9 else ""
-        ),
+    user_message = user_message.lower()
+    
+    # طلب معلومات عن الشركة
+    company_info_keywords = [
+        "معلومات عن الشركة", "معلومات عن المجمع", "من هو مجمع عمال مصر",
+        "ما هو مجمع عمال مصر", "عرفني بالمجمع", "نبذة عن المجمع", "نبذة عن الشركة"
     ]
     
-    # محاولة مطابقة رسالة المستخدم مع الأنماط
-    for pattern, response in local_patterns:
-        if re.search(pattern, user_message, re.IGNORECASE):
-            # إذا كانت الاستجابة دالة، قم بتنفيذها للحصول على الرد
-            if callable(response):
-                return response(), True
-            return response, True
+    if match_keywords(user_message, company_info_keywords):
+        return get_company_info(data), 0.9
     
-    # لم يتم العثور على تطابق
-    return "", False
+    # طلب معلومات الاتصال
+    contact_keywords = [
+        "معلومات الاتصال", "اتصل بنا", "رقم الهاتف", "البريد الإلكتروني",
+        "العنوان", "الموقع", "الواتساب", "التواصل", "فين المقر", "عنوان الشركة"
+    ]
+    
+    if match_keywords(user_message, contact_keywords):
+        return get_contact_info(data), 0.9
+    
+    # البحث في الأسئلة الشائعة
+    faq_answer, confidence = search_faq(user_message, data)
+    if faq_answer and confidence >= 0.6:
+        # إضافة تعبير بشري في البداية
+        human_expressions = data.get("human_expressions", {})
+        greetings = human_expressions.get("greetings", ["أهلاً!"])
+        explanations = human_expressions.get("explanations", ["إليك المعلومات المطلوبة:"])
+        
+        response = f"{random.choice(greetings)}\n\n{random.choice(explanations)}\n\n{faq_answer}"
+        
+        return response, confidence
+    
+    # التحقق من وجود ردود عامة للأسئلة الشائعة جدًا
+    if "كيف حالك" in user_message or "ازيك" in user_message:
+        return "أنا بخير، شكراً للسؤال! كيف يمكنني مساعدتك اليوم؟", 0.8
+    
+    if "شكرا" in user_message or "شكراً" in user_message:
+        return "العفو! سعدت بخدمتك. هل هناك شيء آخر يمكنني مساعدتك به؟", 0.8
+    
+    # لم يتم العثور على رد محلي مناسب
+    return None, 0.0
 
 def main() -> None:
     """
@@ -275,8 +376,8 @@ def main() -> None:
                 continue
             
             # التحقق من الردود المحلية
-            local_response, found = handle_local_response(user_message)
-            if found:
+            local_response, confidence = handle_local_response(user_message)
+            if local_response:
                 print(f"\nمحمد سلامة: {local_response}")
                 continue
             

@@ -1,314 +1,361 @@
 """
-Flask server لتشغيل واجهة webhook لصفحة الفيسبوك
-يقوم باستقبال الطلبات من فيسبوك ومعالجتها
+خادم الويب لشات بوت مجمع عمال مصر
+يوفر واجهة برمجة تطبيقات (API) للتفاعل مع الشات بوت
+ويتعامل مع أحداث Webhook لماسنجر فيسبوك
 """
 
 import os
 import json
+import logging
 import hmac
 import hashlib
-import logging
-import datetime
-from typing import Dict, Any, Union
+from typing import Dict, Any, Optional
 
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-
-from config import SERVER_SETTINGS, FACEBOOK_SETTINGS, setup_logging
+from flask import Flask, request, jsonify, Response
 from bot import ChatBot
+from messenger_utils import (
+    send_text_message, 
+    send_button_template, 
+    send_quick_replies,
+    handle_postback,
+    extract_menu_quick_replies,
+    send_menu_message
+)
+from config import (
+    SERVER_SETTINGS, 
+    FACEBOOK_SETTINGS, 
+    BOT_SETTINGS, 
+    APP_SETTINGS
+)
 
-# إعداد السجلات
-setup_logging()
+# إعداد التسجيل
+logging.basicConfig(
+    level=getattr(logging, APP_SETTINGS["LOG_LEVEL"]),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    filename=BOT_SETTINGS.get("LOG_FILE")
+)
 logger = logging.getLogger(__name__)
 
 # إنشاء تطبيق Flask
 app = Flask(__name__)
-CORS(app)  # السماح بطلبات CORS
 
 # إنشاء كائن الشات بوت
 chatbot = ChatBot()
 
 @app.route('/', methods=['GET'])
 def index():
-    """صفحة الترحيب الرئيسية"""
+    """الصفحة الرئيسية للخادم"""
     return jsonify({
-        "status": "online",
-        "app": "fbchatomc",
-        "version": "1.0.0",
-        "description": "شات بوت مجمع عمال مصر"
+        "name": "شات بوت مجمع عمال مصر - محمد سلامة",
+        "version": APP_SETTINGS.get("VERSION", "1.0.0"),
+        "status": "متصل",
+        "environment": APP_SETTINGS.get("ENVIRONMENT", "development")
     })
 
-@app.route('/webhook', methods=['GET', 'POST'])
-def webhook():
+@app.route('/api/chat', methods=['POST'])
+def api_chat():
     """
-    معالجة طلبات webhook من الفيسبوك
-    GET: للتحقق من صحة webhook
-    POST: لاستقبال الأحداث (رسائل، تعليقات، إلخ)
+    واجهة برمجة التطبيقات للدردشة مع الشات بوت
+    تستخدم لاختبار الشات بوت عبر واجهة مخصصة
     """
-    if request.method == 'GET':
-        return verify_webhook(request)
-    elif request.method == 'POST':
-        return process_webhook_event(request)
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "البيانات المدخلة فارغة"}), 400
+        
+        user_id = data.get('user_id', 'api_user')
+        message = data.get('message')
+        
+        if not message:
+            return jsonify({"error": "الرسالة فارغة"}), 400
+        
+        response = chatbot.generate_response(message, user_id)
+        
+        return jsonify({
+            "user_id": user_id,
+            "response": response
+        })
+    
+    except Exception as e:
+        logger.error(f"خطأ في معالجة طلب API Chat: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/status', methods=['GET'])
+def api_status():
+    """الحصول على حالة الشات بوت"""
+    try:
+        # اختبار اتصال الشات بوت بـ DeepSeek API
+        api_status = chatbot.api.validate_connection()
+        
+        status_data = {
+            "status": "متصل" if api_status.get("status") == "متصل" else "غير متصل",
+            "api_status": api_status,
+            "bot_name": chatbot.bot_name,
+            "version": APP_SETTINGS.get("VERSION", "1.0.0"),
+            "environment": APP_SETTINGS.get("ENVIRONMENT", "development")
+        }
+        
+        return jsonify(status_data)
+    
+    except Exception as e:
+        logger.error(f"خطأ في الحصول على حالة الشات بوت: {e}")
+        return jsonify({"error": str(e), "status": "خطأ"}), 500
+
+@app.route(SERVER_SETTINGS.get("WEBHOOK_ROUTE", "/webhook"), methods=['GET'])
+def webhook_verify():
+    """
+    التحقق من صحة webhook لفيسبوك
+    يتم استدعاؤها عند تسجيل webhook في إعدادات تطبيق فيسبوك
+    """
+    verify_token = request.args.get('hub.verify_token')
+    challenge = request.args.get('hub.challenge')
+    
+    if not verify_token or not challenge:
+        return "رمز التحقق أو التحدي غير موجود", 400
+    
+    # التحقق من رمز التحقق
+    if verify_token == FACEBOOK_SETTINGS.get("VERIFY_TOKEN"):
+        logger.info("تم التحقق من webhook بنجاح")
+        return challenge
     else:
-        return jsonify({"error": "طريقة غير مدعومة"}), 405
+        logger.warning(f"فشل التحقق من webhook: رمز تحقق غير صالح: {verify_token}")
+        return "رمز تحقق غير صالح", 403
 
-def verify_webhook(req):
+def verify_facebook_signature(request_data: bytes, signature_header: str) -> bool:
     """
-    التحقق من صحة webhook عند تسجيله مع فيسبوك
-    """
-    # استخراج المعلمات من الطلب
-    mode = req.args.get('hub.mode')
-    token = req.args.get('hub.verify_token')
-    challenge = req.args.get('hub.challenge')
+    التحقق من توقيع فيسبوك للتأكد من أن الطلب قادم من فيسبوك
     
-    # التحقق من صحة الطلب
-    if mode and token:
-        if mode == 'subscribe' and token == FACEBOOK_SETTINGS['VERIFY_TOKEN']:
-            logger.info("تم التحقق من webhook بنجاح!")
-            return challenge
-        else:
-            logger.warning(f"فشل التحقق من webhook! المفتاح غير صحيح: {token}")
-            return jsonify({"error": "تحقق غير صحيح"}), 403
+    :param request_data: بيانات الطلب
+    :param signature_header: رأس التوقيع
+    :return: True إذا كان التوقيع صحيحًا
+    """
+    app_secret = FACEBOOK_SETTINGS.get("APP_SECRET")
     
-    return jsonify({"error": "معلمات مفقودة"}), 400
-
-def verify_request_signature(req):
-    """
-    التحقق من توقيع طلب webhook للتأكد من أنه من فيسبوك
-    """
-    # إذا لم يكن هناك مفتاح سري للتطبيق، فلا يمكن التحقق
-    if not FACEBOOK_SETTINGS['APP_SECRET']:
+    if not app_secret:
+        logger.warning("لم يتم تعيين APP_SECRET، تخطي التحقق من التوقيع")
         return True
     
-    # الحصول على التوقيع من الرأس
-    signature = req.headers.get('X-Hub-Signature-256')
-    if not signature:
-        logger.warning("لم يتم العثور على توقيع في الطلب!")
+    if not signature_header:
+        logger.warning("رأس X-Hub-Signature-256 مفقود")
         return False
     
-    # حساب التوقيع المتوقع
-    signature_parts = signature.split('=')
-    if len(signature_parts) != 2 or signature_parts[0] != 'sha256':
-        logger.warning(f"تنسيق توقيع غير صالح: {signature}")
+    # التحقق من صحة التوقيع
+    signature_parts = signature_header.split('=')
+    if len(signature_parts) != 2:
+        logger.warning(f"تنسيق رأس X-Hub-Signature-256 غير صالح: {signature_header}")
         return False
     
-    # حساب HMAC لمحتوى الطلب
-    request_data = req.get_data()
+    algorithm, signature = signature_parts
+    if algorithm != 'sha256':
+        logger.warning(f"خوارزمية توقيع غير معتمدة: {algorithm}")
+        return False
+    
+    # حساب HMAC والتحقق من التوقيع
     expected_signature = hmac.new(
-        bytes(FACEBOOK_SETTINGS['APP_SECRET'], 'utf-8'),
+        app_secret.encode('utf-8'),
         msg=request_data,
         digestmod=hashlib.sha256
     ).hexdigest()
     
-    # مقارنة التوقيعات
-    if not hmac.compare_digest(signature_parts[1], expected_signature):
-        logger.warning("توقيع غير متطابق!")
+    if not hmac.compare_digest(signature, expected_signature):
+        logger.warning("توقيع فيسبوك غير صالح")
         return False
     
     return True
 
-def process_webhook_event(req):
+@app.route(SERVER_SETTINGS.get("WEBHOOK_ROUTE", "/webhook"), methods=['POST'])
+def webhook_handler():
     """
-    معالجة الأحداث الواردة من webhook الفيسبوك
+    معالجة أحداث webhook من فيسبوك (رسائل، أوامر خلفية، إلخ)
     """
-    # التحقق من توقيع الطلب
-    if not verify_request_signature(req):
-        return jsonify({"error": "توقيع غير صالح"}), 403
+    # الحصول على بيانات الطلب
+    request_data = request.get_data()
     
-    # استخراج الجسم من الطلب
-    data = req.json
+    # التحقق من توقيع فيسبوك إذا كانت بيئة الإنتاج
+    if APP_SETTINGS.get("ENVIRONMENT") == "production":
+        signature_header = request.headers.get('X-Hub-Signature-256')
+        if not verify_facebook_signature(request_data, signature_header):
+            logger.warning("تم رفض طلب webhook، توقيع غير صالح")
+            return "توقيع غير صالح", 403
     
     try:
-        # التحقق من أن الحدث من صفحة
-        if data["object"] == "page":
-            # معالجة كل مدخل
-            for entry in data["entry"]:
-                # التحقق من صفحة المصدر
-                page_id = entry.get("id")
-                if FACEBOOK_SETTINGS['PAGE_ID'] and page_id != FACEBOOK_SETTINGS['PAGE_ID']:
-                    logger.warning(f"تم استلام حدث من صفحة غير معروفة: {page_id}")
-                    continue
+        data = request.get_json()
+        
+        if data.get('object') != 'page':
+            logger.warning(f"نوع كائن غير مدعوم: {data.get('object')}")
+            return "نوع كائن غير مدعوم", 400
+        
+        entries = data.get('entry', [])
+        
+        for entry in entries:
+            for event in entry.get('messaging', []):
+                process_messenger_event(event)
+        
+        return "OK"
+    
+    except Exception as e:
+        logger.error(f"خطأ في معالجة webhook: {e}")
+        return "خطأ في المعالجة", 500
+
+def process_messenger_event(event: Dict[str, Any]) -> None:
+    """
+    معالجة حدث ماسنجر (رسالة، أمر خلفي، إلخ)
+    
+    :param event: بيانات الحدث من فيسبوك
+    """
+    sender_id = event.get('sender', {}).get('id')
+    
+    if not sender_id:
+        logger.warning("معرف المرسل غير موجود في الحدث")
+        return
+    
+    # معالجة الرسائل النصية
+    if 'message' in event:
+        handle_messenger_message(sender_id, event['message'])
+    
+    # معالجة الأوامر الخلفية (الأزرار)
+    elif 'postback' in event:
+        handle_messenger_postback(sender_id, event['postback'])
+    
+    # معالجة قراءة الرسائل
+    elif 'read' in event:
+        # تسجيل وقت قراءة الرسالة
+        logger.debug(f"تم قراءة الرسائل من قبل المستخدم {sender_id} في الوقت {event['read'].get('watermark')}")
+    
+    # معالجة كتابة الرسائل
+    elif 'typing' in event:
+        typing_status = "بدأ" if event['typing'].get('status') == 1 else "توقف"
+        logger.debug(f"المستخدم {sender_id} {typing_status} الكتابة")
+
+def handle_messenger_message(sender_id: str, message_data: Dict[str, Any]) -> None:
+    """
+    معالجة رسالة ماسنجر
+    
+    :param sender_id: معرف المرسل
+    :param message_data: بيانات الرسالة
+    """
+    # تجاهل الإصدار المتكرر لنفس الرسالة
+    if message_data.get('is_echo', False):
+        return
+    
+    # التعامل مع الردود السريعة
+    if 'quick_reply' in message_data:
+        quick_reply_payload = message_data['quick_reply'].get('payload')
+        if quick_reply_payload:
+            logger.info(f"تم استلام رد سريع من المستخدم {sender_id}: {quick_reply_payload}")
+            handle_messenger_quick_reply(sender_id, quick_reply_payload)
+            return
+    
+    # التعامل مع النص
+    if 'text' in message_data:
+        message_text = message_data['text']
+        logger.info(f"تم استلام رسالة نصية من المستخدم {sender_id}: {message_text[:50]}...")
+        
+        # التحقق من طلبات القائمة
+        if message_text.lower() in ["القائمة", "menu", "خدمات", "services", "قائمة"]:
+            send_menu_message(sender_id, chatbot.main_menu, "main")
+            return
+        
+        # توليد رد باستخدام الشات بوت
+        try:
+            response = chatbot.generate_messenger_response(sender_id, message_text)
+            
+            # التحقق من وجود طلب قائمة في الرد
+            if "###MENU:" in response:
+                menu_parts = response.split("###MENU:")
+                text = menu_parts[0].strip()
+                menu_type = menu_parts[1].strip()
                 
-                if "messaging" in entry:
-                    # حدث ماسنجر
-                    process_messenger_events(entry.get("messaging", []))
-                elif "changes" in entry:
-                    # حدث تغيير (مثل تعليق جديد)
-                    process_change_events(entry.get("changes", []))
+                # إرسال الرد النصي أولاً
+                if text:
+                    send_text_message(sender_id, text)
+                
+                # إرسال القائمة
+                if menu_type == "MAIN":
+                    send_menu_message(sender_id, chatbot.main_menu, "main")
+                elif menu_type.startswith("SUB:"):
+                    submenu_key = menu_type.split("SUB:")[1]
+                    send_menu_message(sender_id, chatbot.main_menu, "submenu", submenu_key)
+            
+            # التحقق من وجود أزرار في الرد
+            elif "###BUTTONS:" in response:
+                from messenger_utils import process_messenger_text, send_formatted_message
+                send_formatted_message(sender_id, response)
+            
+            # إرسال رد نصي عادي
+            else:
+                # تقسيم الرسائل الطويلة
+                if len(response) > 2000:
+                    parts = [response[i:i+2000] for i in range(0, len(response), 2000)]
+                    for part in parts:
+                        send_text_message(sender_id, part)
                 else:
-                    logger.warning(f"نوع حدث غير معروف: {entry}")
-            
-            return jsonify({"status": "success"}), 200
-        else:
-            # ليس حدث صفحة
-            logger.warning(f"كائن غير معروف: {data['object']}")
-            return jsonify({"error": "غير مدعوم"}), 400
-    except Exception as e:
-        logger.error(f"خطأ في معالجة حدث webhook: {e}")
-        return jsonify({"error": str(e)}), 500
-
-def process_messenger_events(events):
-    """
-    معالجة أحداث ماسنجر (رسائل المستخدمين)
-    """
-    for event in events:
-        sender_id = event.get("sender", {}).get("id")
-        recipient_id = event.get("recipient", {}).get("id")
-        timestamp = event.get("timestamp")
+                    send_text_message(sender_id, response)
         
-        # التحقق من أن الحدث موجه إلى صفحتنا
-        if recipient_id != FACEBOOK_SETTINGS['PAGE_ID']:
-            logger.warning(f"تم استلام رسالة لصفحة مختلفة: {recipient_id}")
-            continue
-        
-        # التحقق من نوع الحدث
-        if "message" in event:
-            message = event["message"]
-            message_text = message.get("text", "")
+        except Exception as e:
+            logger.error(f"خطأ في توليد الرد للمستخدم {sender_id}: {e}")
             
-            logger.info(f"تم استلام رسالة من {sender_id}: {message_text[:50]}...")
-            
-            # توليد رد
-            response = chatbot.generate_messenger_response(message_text, sender_id)
-            
-            # إرسال الرد إلى المستخدم
-            send_facebook_message(sender_id, response)
-        elif "postback" in event:
-            # معالجة postback من قائمة
-            postback = event["postback"]
-            payload = postback.get("payload", "")
-            
-            logger.info(f"تم استلام postback من {sender_id}: {payload}")
-            
-            # توليد رد بناءً على payload
-            response = chatbot.process_menu_request(payload)
-            
-            # إرسال الرد إلى المستخدم
-            send_facebook_message(sender_id, response or "عذراً، لم أتمكن من معالجة طلبك.")
+            # استخدام رسالة خطأ احتياطية
+            error_message = """
+عذراً، حدث خطأ أثناء معالجة رسالتك.
 
-def process_change_events(changes):
-    """
-    معالجة أحداث التغيير (مثل التعليقات الجديدة)
-    """
-    for change in changes:
-        # التحقق من نوع التغيير
-        if change["field"] == "feed":
-            value = change["value"]
+يمكنك التواصل معنا مباشرة على الأرقام التالية:
+📞 01100901200 (المقر الرئيسي)
+📞 01103642612 (العاشر من رمضان)
+أو زيارة موقعنا الإلكتروني: https://www.omalmisr.com/
+            """
             
-            # معالجة التعليق الجديد
-            if "comment_id" in value and "message" in value:
-                comment_id = value["comment_id"]
-                message = value["message"]
-                post_id = value.get("post_id", "")
-                
-                logger.info(f"تم استلام تعليق جديد: {comment_id} على المنشور: {post_id}")
-                
-                # توليد رد على التعليق
-                response = chatbot.generate_comment_response(message)
-                
-                # الرد على التعليق
-                if response:
-                    reply_to_facebook_comment(comment_id, response)
-
-def send_facebook_message(recipient_id, message_text):
-    """
-    إرسال رسالة إلى المستخدم عبر ماسنجر الفيسبوك
-    """
-    import requests
+            send_text_message(sender_id, error_message)
     
-    url = f"https://graph.facebook.com/v17.0/me/messages?access_token={FACEBOOK_SETTINGS['PAGE_TOKEN']}"
+    # التعامل مع المرفقات (صور، فيديو، ملفات، إلخ)
+    elif 'attachments' in message_data:
+        attachments = message_data['attachments']
+        attachment_types = [attachment.get('type') for attachment in attachments]
+        
+        logger.info(f"تم استلام مرفقات من المستخدم {sender_id}: {', '.join(attachment_types)}")
+        
+        # إرسال رد على المرفقات
+        send_text_message(
+            sender_id,
+            "شكراً لإرسال هذه المرفقات. هل يمكنني مساعدتك في شيء آخر؟"
+        )
+
+def handle_messenger_postback(sender_id: str, postback_data: Dict[str, Any]) -> None:
+    """
+    معالجة أمر خلفي من ماسنجر (الأزرار)
     
-    try:
-        # تحضير محتوى الرسالة
-        data = {
-            "recipient": {"id": recipient_id},
-            "message": {"text": message_text}
-        }
-        
-        # إرسال الطلب إلى API الفيسبوك
-        response = requests.post(url, json=data)
-        
-        if response.status_code == 200:
-            logger.info(f"تم إرسال الرسالة بنجاح إلى {recipient_id}")
-            return True
-        else:
-            logger.error(f"فشل إرسال الرسالة: {response.status_code} - {response.text}")
-            return False
-    except Exception as e:
-        logger.error(f"خطأ في إرسال الرسالة إلى {recipient_id}: {e}")
-        return False
-
-def reply_to_facebook_comment(comment_id, message):
+    :param sender_id: معرف المرسل
+    :param postback_data: بيانات الأمر الخلفي
     """
-    الرد على تعليق على الفيسبوك
-    """
-    import requests
+    payload = postback_data.get('payload')
     
-    url = f"https://graph.facebook.com/{comment_id}/comments?access_token={FACEBOOK_SETTINGS['PAGE_TOKEN']}"
+    if not payload:
+        logger.warning(f"أمر خلفي بدون payload من المستخدم {sender_id}")
+        return
     
-    try:
-        # إرسال الطلب إلى API الفيسبوك
-        response = requests.post(url, data={"message": message})
-        
-        if response.status_code == 200:
-            logger.info(f"تم الرد على التعليق {comment_id} بنجاح")
-            
-            # حفظ المعلومات للتحليلات
-            chatbot.save_facebook_response(comment_id, message)
-            return True
-        else:
-            logger.error(f"فشل الرد على التعليق: {response.status_code} - {response.text}")
-            return False
-    except Exception as e:
-        logger.error(f"خطأ في الرد على التعليق {comment_id}: {e}")
-        return False
+    logger.info(f"تم استلام أمر خلفي من المستخدم {sender_id}: {payload}")
+    
+    # معالجة الأمر الخلفي مع بيانات القائمة الرئيسية
+    handle_postback(sender_id, payload, chatbot.main_menu)
 
-@app.route('/api/chat', methods=['POST'])
-def chat_api():
+def handle_messenger_quick_reply(sender_id: str, payload: str) -> None:
     """
-    واجهة API للدردشة لاختبار الشات بوت محلياً
+    معالجة رد سريع من ماسنجر
+    
+    :param sender_id: معرف المرسل
+    :param payload: البيانات المرسلة مع الرد السريع
     """
-    try:
-        data = request.json
-        
-        # التحقق من وجود الرسالة
-        if not data or "message" not in data:
-            return jsonify({"error": "يجب توفير رسالة"}), 400
-        
-        message = data["message"]
-        user_id = data.get("user_id", "local_user")
-        
-        # توليد رد
-        response = chatbot.generate_messenger_response(message, user_id)
-        
-        # حفظ المحادثة
-        conversation_id = f"local_chat_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        chatbot.save_conversation(user_id, message, response, conversation_id=conversation_id)
-        
-        return jsonify({
-            "response": response,
-            "user_id": user_id,
-            "timestamp": datetime.datetime.now().isoformat()
-        })
-    except Exception as e:
-        logger.error(f"خطأ في معالجة طلب API: {e}")
-        return jsonify({"error": str(e)}), 500
+    logger.info(f"معالجة رد سريع من المستخدم {sender_id}: {payload}")
+    
+    # معالجة الأمر الخلفي مع بيانات القائمة الرئيسية
+    handle_postback(sender_id, payload, chatbot.main_menu)
 
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    """
-    التحقق من صحة التطبيق
-    """
-    return jsonify({
-        "status": "healthy",
-        "time": datetime.datetime.now().isoformat(),
-        "api": chatbot.api.get_status()
-    })
-
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", SERVER_SETTINGS["PORT"]))
-    app.run(
-        host=SERVER_SETTINGS["HOST"],
-        port=port,
-        debug=SERVER_SETTINGS["DEBUG"]
-    )
+if __name__ == '__main__':
+    # تشغيل الخادم
+    host = SERVER_SETTINGS.get("HOST", "0.0.0.0")
+    port = SERVER_SETTINGS.get("PORT", 5000)
+    debug = SERVER_SETTINGS.get("DEBUG", False)
+    
+    logger.info(f"بدء تشغيل الخادم على {host}:{port} (debug={debug})")
+    app.run(host=host, port=port, debug=debug)

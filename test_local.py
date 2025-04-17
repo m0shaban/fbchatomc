@@ -1,138 +1,215 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
-برنامج لاختبار الشات بوت محلياً قبل نشره على الفيسبوك ماسنجر
-هذا الملف يساعد في اختبار "محمد سلامة" بوت في بيئة محلية عبر واجهة سطر الأوامر
+واجهة محادثة محلية لاختبار شات بوت مجمع عمال مصر
+تستخدم هذه الواجهة لاختبار وتقييم أداء الشات بوت قبل نشره على فيسبوك
 """
+
 import os
-import sys
-import time
 import json
 import random
-import platform
+import datetime
 import subprocess
-from datetime import datetime
+import logging
+from typing import Dict, Any
+
 from bot import ChatBot
-from config import BOT_SETTINGS, APP_SETTINGS, setup_log_directory, setup_conversations_directory
+from config import BOT_SETTINGS, APP_SETTINGS, init
 
-def clear_screen():
-    """مسح الشاشة بطريقة متوافقة مع نظام التشغيل"""
-    if platform.system() == "Windows":
-        os.system("cls")
-    else:
-        os.system("clear")
+# تهيئة الإعدادات
+init()
 
-def print_header():
-    """طباعة رأس الصفحة للترحيب بالمستخدم"""
-    header = """
-============================================================
-                    مجمع عمال مصر
-               اختبار شات بوت محمد سلامة
-============================================================
+# إعداد التسجيل
+logging.basicConfig(
+    level=getattr(logging, APP_SETTINGS["LOG_LEVEL"]),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    filename=APP_SETTINGS.get("LOG_FILE")
+)
+logger = logging.getLogger(__name__)
 
-أهلاً بك في اختبار شات بوت محمد سلامة!
-يمكنك التحدث مع البوت وسيرد عليك. اكتب 'خروج' للخروج أو 'حفظ' لحفظ المحادثة.
-"""
-    print(header)
-
-def print_response(message, delay=0.01):
-    """طباعة رد الشات بوت مع تأثير الكتابة الحية"""
-    print("\n🤵 محمد: ")
-    for char in message:
-        print(char, end='', flush=True)
-        time.sleep(delay)
-    print()  # سطر جديد بعد الانتهاء من الرسالة
-
-def setup_terminal_encoding():
-    """إعداد ترميز الطرفية لدعم اللغة العربية"""
-    if platform.system() == "Windows":
-        try:
-            # محاولة ضبط ترميز النافذة الطرفية في ويندوز
-            subprocess.run(["chcp", "65001"], shell=True, check=False)
-            os.system("chcp 65001 > nul")
-        except Exception:
-            print("تعذّر ضبط ترميز النافذة الطرفية، قد تظهر الأحرف العربية بشكل غير صحيح.")
-    else:
-        # تأكد من ضبط متغيرات البيئة في لينكس/ماك
-        os.environ['PYTHONIOENCODING'] = 'utf-8'
-
-def save_conversation(bot, user_id, filename=None):
-    """حفظ المحادثة في ملف"""
+def save_conversation(conversation: Dict[str, Any]) -> None:
+    """
+    حفظ المحادثة في ملف JSON
+    
+    :param conversation: قاموس يحتوي على بيانات المحادثة
+    """
+    # إنشاء اسم الملف باستخدام الوقت الحالي
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"local_chat_{timestamp}.json"
+    
     # التأكد من وجود مجلد المحادثات
-    if not os.path.exists(BOT_SETTINGS.get("CONVERSATIONS_DIR", "conversations")):
-        os.makedirs(BOT_SETTINGS.get("CONVERSATIONS_DIR", "conversations"))
+    if not os.path.exists(BOT_SETTINGS["CONVERSATIONS_DIR"]):
+        os.makedirs(BOT_SETTINGS["CONVERSATIONS_DIR"], exist_ok=True)
     
-    # إنشاء اسم ملف فريد إذا لم يتم تمريره
-    if filename is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = os.path.join(BOT_SETTINGS.get("CONVERSATIONS_DIR", "conversations"), f"local_chat_{timestamp}.json")
-    
-    # حفظ المحادثة باستخدام دالة الشات بوت
-    success = bot.save_conversation_history(filename)
-    
-    if success:
-        print(f"\nتم حفظ المحادثة في الملف: {filename}")
-    else:
-        print("\nحدث خطأ أثناء حفظ المحادثة.")
-    
-    return success
-
-def main():
-    """الدالة الرئيسية للتفاعل مع الشات بوت"""
-    # إعداد ترميز الطرفية
-    setup_terminal_encoding()
-    
-    # إعداد بيئة التشغيل
-    setup_log_directory()
-    setup_conversations_directory()
-    
-    # مسح الشاشة وطباعة رأس الصفحة
-    clear_screen()
-    print_header()
-    
-    # إنشاء معرف فريد للمستخدم المحلي
-    user_id = f"local_user_{random.randint(1000, 9999)}"
-    
-    # تهيئة الشات بوت
+    # حفظ المحادثة في ملف JSON
+    filepath = os.path.join(BOT_SETTINGS["CONVERSATIONS_DIR"], filename)
     try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(conversation, f, ensure_ascii=False, indent=4)
+        print(f"تم حفظ المحادثة في الملف: {filepath}")
+    except Exception as e:
+        logger.error(f"خطأ في حفظ المحادثة: {e}")
+        print(f"خطأ في حفظ المحادثة: {e}")
+
+def set_console_arabic() -> bool:
+    """
+    تعيين ترميز وحدة التحكم لدعم اللغة العربية
+    
+    :return: True إذا تم تعيين الترميز بنجاح
+    """
+    try:
+        # محاولة تعيين ترميز وحدة التحكم إلى UTF-8
+        if os.name == 'nt':  # نظام Windows
+            # استخدام subprocess بدلاً من os.system لتحسين التوافق
+            subprocess.run(['chcp', '65001'], check=True, shell=True)
+        return True
+    except Exception as e:
+        logger.error(f"خطأ في تعيين ترميز وحدة التحكم: {e}")
+        print(f"تحذير: قد يكون هناك مشكلة في عرض النص العربي بسبب خطأ في تعيين الترميز: {e}")
+        return False
+
+def print_welcome() -> None:
+    """
+    طباعة رسالة ترحيبية
+    """
+    print("\n" + "=" * 50)
+    print("مرحباً بك في واجهة اختبار شات بوت مجمع عمال مصر!")
+    print("هذه الواجهة تسمح لك باختبار الشات بوت قبل نشره على فيسبوك")
+    print("اكتب 'خروج' للخروج من الواجهة، أو 'حفظ' لحفظ المحادثة")
+    print("الأوامر المتاحة:")
+    print("- القائمة: لعرض قائمة الخدمات المتاحة")
+    print("- إحصائيات: لعرض إحصائيات المحادثة الحالية")
+    print("- حفظ: لحفظ المحادثة الحالية")
+    print("- خروج: للخروج من الواجهة")
+    print("=" * 50 + "\n")
+
+def test_connection() -> bool:
+    """
+    اختبار الاتصال بـ DeepSeek API
+    
+    :return: True إذا نجح الاتصال
+    """
+    try:
+        print("اختبار الاتصال بـ DeepSeek API...")
+        
+        # إنشاء نسخة من الشات بوت
         bot = ChatBot()
         
-        # تشغيل حلقة المحادثة
-        while True:
-            # استقبال مدخلات المستخدم
-            try:
-                user_input = input("\n👤 أنت: ")
-            except KeyboardInterrupt:
-                print("\n\nتم إنهاء المحادثة بواسطة المستخدم.")
-                save_conversation(bot, user_id)
-                break
-            except Exception as e:
-                print(f"\nحدث خطأ في قراءة المدخلات: {e}")
-                continue
-            
-            # التحقق من أوامر الخروج أو الحفظ
-            if user_input.lower() in ["خروج", "exit", "quit", "q"]:
-                print("\n🤵 محمد: شكراً لتواصلك معنا! نتطلع للتحدث معك مرة أخرى.")
-                break
-            elif user_input.lower() in ["حفظ", "save", "s"]:
-                save_conversation(bot, user_id)
-                continue
-            elif not user_input.strip():
-                continue
-            
-            # الحصول على رد من الشات بوت
-            try:
-                # تغيير استدعاء دالة توليد الرد لاستخدام الدالة الصحيحة وترتيب المعلمات الصحيح
-                response = bot.generate_messenger_response(user_id, user_input)
-                print_response(response)
-            except Exception as e:
-                print(f"\n🤵 محمد: عذراً، حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى. ({e})")
+        # اختبار الاتصال عن طريق إرسال رسالة اختبار
+        test_message = "اختبار الاتصال"
         
-        # حفظ المحادثة تلقائياً عند الخروج
-        save_conversation(bot, user_id)
-    
+        # تحضير المستخدم الوهمي للاختبار
+        user_id = "test_connection"
+        bot.conversation_state[user_id] = {"awaiting_name": False}
+        
+        # توجيه رسالة اختبار
+        api_response = bot.api.generate_response(
+            test_message, 
+            context="هذا اختبار اتصال فقط، يرجى الرد بـ 'اختبار ناجح' فقط."
+        )
+        
+        # التحقق من الاستجابة
+        if api_response and "choices" in api_response:
+            print("✅ تم الاتصال بـ DeepSeek API بنجاح!")
+            logger.info("نجح اختبار الاتصال بـ DeepSeek API")
+            return True
+        else:
+            print("❌ فشل الاتصال بـ DeepSeek API!")
+            logger.error(f"فشل اختبار الاتصال بـ DeepSeek API: {api_response}")
+            return False
+            
     except Exception as e:
-        print(f"حدث خطأ غير متوقع: {e}")
+        print(f"❌ حدث خطأ أثناء اختبار الاتصال: {e}")
+        logger.error(f"خطأ في اختبار الاتصال بـ DeepSeek API: {e}")
+        return False
+
+def main() -> None:
+    """
+    الدالة الرئيسية لواجهة المحادثة المحلية
+    """
+    # محاولة تعيين ترميز وحدة التحكم لدعم اللغة العربية
+    set_console_arabic()
+    
+    # طباعة رسالة ترحيبية
+    print_welcome()
+    
+    # اختبار الاتصال بـ DeepSeek API
+    connection_success = test_connection()
+    if not connection_success:
+        print("\nتحذير: فشل الاتصال بـ DeepSeek API. سيستخدم الشات بوت آلية الاحتياط.")
+    
+    # تهيئة الشات بوت
+    print("\nجاري تهيئة الشات بوت...")
+    bot = ChatBot()
+    print("تم تهيئة الشات بوت بنجاح.")
+    
+    # تعيين معرف المستخدم المحلي
+    user_id = f"local_user_{random.randint(1000, 9999)}"
+    
+    # بدء المحادثة مع الشات بوت
+    print("\nمحادثة جديدة بدأت. اكتب رسالتك أدناه:")
+    
+    # حلقة المحادثة
+    while True:
+        try:
+            # الحصول على رسالة المستخدم
+            user_message = input("\nأنت: ")
+            
+            # التحقق من أوامر الخروج
+            if user_message.strip().lower() in ["exit", "quit", "خروج"]:
+                print("\nإنهاء المحادثة...")
+                break
+            
+            # التحقق من أمر الحفظ
+            if user_message.strip().lower() in ["save", "حفظ"]:
+                # حفظ المحادثة الحالية
+                if hasattr(bot, 'conversation_history') and user_id in bot.conversation_history:
+                    save_conversation(bot.conversation_history[user_id])
+                else:
+                    print("لا توجد محادثة لحفظها.")
+                continue
+            
+            # التحقق من أمر الإحصائيات
+            if user_message.strip().lower() in ["stats", "إحصائيات"]:
+                # طباعة إحصائيات المحادثة
+                if hasattr(bot, 'conversation_history') and user_id in bot.conversation_history:
+                    messages_count = len(bot.conversation_history[user_id])
+                    print(f"\nإحصائيات المحادثة:")
+                    print(f"عدد الرسائل: {messages_count}")
+                    print(f"معرف المستخدم: {user_id}")
+                    if hasattr(bot, 'conversation_state') and user_id in bot.conversation_state:
+                        if 'user_name' in bot.conversation_state[user_id]:
+                            print(f"اسم المستخدم: {bot.conversation_state[user_id]['user_name']}")
+                else:
+                    print("لا توجد إحصائيات متاحة.")
+                continue
+            
+            # الحصول على رد الشات بوت
+            try:
+                response = bot.generate_messenger_response(user_id, user_message)
+                print(f"\nمحمد سلامة: {response}")
+            except Exception as e:
+                logger.error(f"خطأ أثناء توليد الرد: {e}")
+                print(f"\nحدث خطأ: {e}")
+                print("استخدام رد احتياطي...")
+                print("\nمحمد سلامة: عذراً، حدث خطأ أثناء معالجة رسالتك. يمكنك التواصل معنا مباشرة على رقم الهاتف: 01100901200 وسنكون سعداء بمساعدتك.")
+            
+        except KeyboardInterrupt:
+            print("\n\nتم إنهاء المحادثة بواسطة المستخدم.")
+            break
+        
+        except Exception as e:
+            logger.error(f"خطأ غير متوقع: {e}")
+            print(f"\nحدث خطأ غير متوقع: {e}")
+    
+    # حفظ المحادثة عند الخروج
+    if hasattr(bot, 'conversation_history') and user_id in bot.conversation_history:
+        if BOT_SETTINGS.get("SAVE_CONVERSATIONS", True):
+            save_conversation(bot.conversation_history[user_id])
+    
+    print("\nتم إنهاء المحادثة. نشكرك على اختبار الشات بوت!")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        logger.critical(f"خطأ في تشغيل الواجهة المحلية: {e}")
+        print(f"خطأ في تشغيل الواجهة المحلية: {e}")
