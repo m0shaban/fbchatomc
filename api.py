@@ -91,6 +91,25 @@ class DeepSeekAPI:
             logger.error(error_message)
             raise Exception(error_message)
     
+    def extract_response_text(self, response: Any) -> str:
+        """
+        استخراج النص من استجابة API
+        
+        :param response: الاستجابة من DeepSeek API
+        :return: النص المستخرج
+        """
+        if isinstance(response, str):
+            return response
+        
+        if isinstance(response, dict):
+            if "choices" in response and len(response["choices"]) > 0:
+                return response["choices"][0].get("message", {}).get("content", "")
+            elif "error" in response:
+                logger.error(f"خطأ في استجابة API: {response['error']}")
+                return f"حدث خطأ: {response.get('error', 'خطأ غير معروف')}"
+        
+        return str(response)
+    
     def validate_connection(self) -> Dict[str, Any]:
         """
         التحقق من صحة الاتصال بـ API
