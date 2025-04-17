@@ -38,13 +38,18 @@ class DeepSeekAPI:
         
         logger.info(f"تم تهيئة واجهة DeepSeek API بنموذج افتراضي: {self.default_model}")
     
-    def generate_response(self, prompt: str, context: str = None, model: str = None) -> str:
+    def generate_response(self, prompt: str, system_message: str = None, 
+                          user_category: str = "", context: str = None, 
+                          human_expressions: Dict = None, contact_info: Dict = None) -> str:
         """
         توليد رد باستخدام DeepSeek API
         
         :param prompt: سؤال المستخدم
+        :param system_message: رسالة النظام (اختياري)
+        :param user_category: فئة المستخدم (اختياري)
         :param context: سياق المحادثة (اختياري)
-        :param model: اسم النموذج (اختياري)
+        :param human_expressions: تعبيرات بشرية (اختياري)
+        :param contact_info: معلومات الاتصال (اختياري)
         :return: النص المولد
         :raises: Exception في حالة وجود خطأ
         """
@@ -59,14 +64,16 @@ class DeepSeekAPI:
         messages = []
         
         # إضافة السياق كرسالة نظام إذا كان موجودًا
-        if context:
+        if system_message:
+            messages.append({"role": "system", "content": system_message})
+        elif context:
             messages.append({"role": "system", "content": context})
         
         # إضافة سؤال المستخدم
         messages.append({"role": "user", "content": prompt})
         
         payload = {
-            "model": model or self.default_model,
+            "model": self.default_model,
             "messages": messages,
             "max_tokens": self.max_tokens,
             "temperature": self.temperature
