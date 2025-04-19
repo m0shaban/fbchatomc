@@ -19,9 +19,7 @@ API_SETTINGS = {
     "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
     "DEFAULT_MODEL": os.getenv("DEFAULT_MODEL", "deepseek-chat"),
     "MAX_TOKENS": int(os.getenv("MAX_TOKENS", "1000")),
-    "TEMPERATURE": float(os.getenv("TEMPERATURE", "0.7")),
-    "USE_FALLBACK_API": os.getenv("USE_FALLBACK_API", "True").lower() in ("true", "1", "yes"),
-    "FALLBACK_PROVIDER": os.getenv("FALLBACK_PROVIDER", "openai")
+    "TEMPERATURE": float(os.getenv("TEMPERATURE", "0.7"))
 }
 
 # إعدادات الشات بوت
@@ -31,9 +29,7 @@ BOT_SETTINGS = {
     "SIMILARITY_THRESHOLD": float(os.getenv("SIMILARITY_THRESHOLD", "0.4")),
     "PERSONALIZE_RESPONSE": os.getenv("PERSONALIZE_RESPONSE", "True").lower() in ("true", "1", "yes"),
     "SAVE_CONVERSATIONS": os.getenv("SAVE_CONVERSATIONS", "True").lower() in ("true", "1", "yes"),
-    "CONVERSATIONS_DIR": os.getenv("CONVERSATIONS_DIR", "conversations"),
-    "AUTO_LEARN": os.getenv("AUTO_LEARN", "False").lower() in ("true", "1", "yes"),
-    "RESPONSE_TIMEOUT": int(os.getenv("RESPONSE_TIMEOUT", "30"))
+    "CONVERSATIONS_DIR": os.getenv("CONVERSATIONS_DIR", "conversations")
 }
 
 # إعدادات فيسبوك
@@ -43,10 +39,7 @@ FACEBOOK_SETTINGS = {
     "APP_SECRET": os.getenv("FB_APP_SECRET"),
     "PAGE_ID": os.getenv("FB_PAGE_ID"),
     "IGNORE_PRAISE_COMMENTS": os.getenv("FB_IGNORE_PRAISE", "True").lower() in ("true", "1", "yes"),
-    "COMMENT_LENGTH_THRESHOLD": int(os.getenv("FB_COMMENT_LENGTH", "3")),
-    "AUTO_COMMENT": os.getenv("FB_AUTO_COMMENT", "True").lower() in ("true", "1", "yes"),
-    "BATCH_SIZE": int(os.getenv("FB_BATCH_SIZE", "10")),
-    "REFRESH_INTERVAL": int(os.getenv("FB_REFRESH_INTERVAL", "300"))
+    "COMMENT_LENGTH_THRESHOLD": int(os.getenv("FB_COMMENT_LENGTH", "3"))
 }
 
 # إعدادات الويب سيرفر
@@ -54,19 +47,7 @@ SERVER_SETTINGS = {
     "HOST": os.getenv("SERVER_HOST", "0.0.0.0"),
     "PORT": int(os.getenv("SERVER_PORT", "5000")),
     "DEBUG": os.getenv("DEBUG_MODE", "False").lower() in ("true", "1", "yes"),
-    "WEBHOOK_ROUTE": os.getenv("WEBHOOK_ROUTE", "/webhook"),
-    "ADMIN_ROUTE": os.getenv("ADMIN_ROUTE", "/admin"),
-    "ADMIN_USERNAME": os.getenv("ADMIN_USERNAME", "admin"),
-    "ADMIN_PASSWORD": os.getenv("ADMIN_PASSWORD", "omc_admin"),
-    "ENABLE_CORS": os.getenv("ENABLE_CORS", "True").lower() in ("true", "1", "yes")
-}
-
-# إعدادات تحليلات البيانات
-ANALYTICS_SETTINGS = {
-    "TRACK_METRICS": os.getenv("TRACK_METRICS", "True").lower() in ("true", "1", "yes"),
-    "METRICS_FILE": os.getenv("METRICS_FILE", "analytics/metrics.json"),
-    "DASHBOARD_ENABLED": os.getenv("DASHBOARD_ENABLED", "True").lower() in ("true", "1", "yes"),
-    "EXPORT_FORMATS": os.getenv("EXPORT_FORMATS", "json,csv").split(",")
+    "WEBHOOK_ROUTE": os.getenv("WEBHOOK_ROUTE", "/webhook")
 }
 
 # إعدادات التطبيق العامة
@@ -74,8 +55,7 @@ APP_SETTINGS = {
     "DEBUG_MODE": os.getenv("DEBUG_MODE", "False").lower() in ("true", "1", "yes"),
     "LOG_LEVEL": os.getenv("LOG_LEVEL", "INFO"),
     "ENVIRONMENT": os.getenv("ENVIRONMENT", "development"),
-    "VERSION": "1.2.0",
-    "MAINTENANCE_MODE": os.getenv("MAINTENANCE_MODE", "False").lower() in ("true", "1", "yes")
+    "VERSION": "1.0.0"
 }
 
 # إنشاء مجلد للسجلات إذا لم يكن موجوداً
@@ -93,15 +73,6 @@ def setup_conversations_directory():
         os.makedirs(BOT_SETTINGS["CONVERSATIONS_DIR"], exist_ok=True)
         print(f"تم إنشاء مجلد المحادثات: {BOT_SETTINGS['CONVERSATIONS_DIR']}")
 
-# إنشاء مجلد للتحليلات إذا لم يكن موجوداً
-def setup_analytics_directory():
-    """إنشاء مجلد لحفظ التحليلات إذا لم يكن موجوداً"""
-    if ANALYTICS_SETTINGS["TRACK_METRICS"]:
-        analytics_dir = os.path.dirname(ANALYTICS_SETTINGS["METRICS_FILE"])
-        if analytics_dir and not os.path.exists(analytics_dir):
-            os.makedirs(analytics_dir, exist_ok=True)
-            print(f"تم إنشاء مجلد التحليلات: {analytics_dir}")
-
 # تهيئة ملف .env إذا لم يكن موجوداً
 def create_env_file():
     """إنشاء ملف .env إذا لم يكن موجوداً مع القيم الافتراضية"""
@@ -114,8 +85,6 @@ DEEPSEEK_API_URL=https://api.deepseek.com/v1/chat/completions
 DEFAULT_MODEL=deepseek-chat
 MAX_TOKENS=1000
 TEMPERATURE=0.7
-USE_FALLBACK_API=True
-FALLBACK_PROVIDER=openai
 
 # إعدادات الشات بوت
 DATA_FILE=data.json
@@ -124,8 +93,6 @@ SIMILARITY_THRESHOLD=0.4
 PERSONALIZE_RESPONSE=True
 SAVE_CONVERSATIONS=True
 CONVERSATIONS_DIR=conversations
-AUTO_LEARN=False
-RESPONSE_TIMEOUT=30
 
 # إعدادات فيسبوك
 FB_PAGE_TOKEN=your_page_access_token_here
@@ -134,30 +101,16 @@ FB_APP_SECRET=your_app_secret_here
 FB_PAGE_ID=your_page_id_here
 FB_IGNORE_PRAISE=True
 FB_COMMENT_LENGTH=3
-FB_AUTO_COMMENT=True
-FB_BATCH_SIZE=10
-FB_REFRESH_INTERVAL=300
 
 # إعدادات الويب سيرفر
 SERVER_HOST=0.0.0.0
 SERVER_PORT=5000
 WEBHOOK_ROUTE=/webhook
-ADMIN_ROUTE=/admin
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=omc_admin
-ENABLE_CORS=True
-
-# إعدادات تحليلات البيانات
-TRACK_METRICS=True
-METRICS_FILE=analytics/metrics.json
-DASHBOARD_ENABLED=True
-EXPORT_FORMATS=json,csv
 
 # إعدادات التطبيق
 DEBUG_MODE=False
 LOG_LEVEL=INFO
 ENVIRONMENT=development
-MAINTENANCE_MODE=False
 """)
         print("تم إنشاء ملف .env بنجاح. يرجى تعديل البيانات وإعادة تشغيل التطبيق.")
 
@@ -218,7 +171,6 @@ def init():
     # إعداد المجلدات
     setup_log_directory()
     setup_conversations_directory()
-    setup_analytics_directory()
     
     # إعداد التسجيل
     setup_logging()
@@ -227,7 +179,6 @@ def init():
     if validate_config():
         print("تم التحقق من الإعدادات بنجاح.")
         print(f"وضع التشغيل: {APP_SETTINGS['ENVIRONMENT']}")
-        print(f"إصدار التطبيق: {APP_SETTINGS['VERSION']}")
         if API_SETTINGS["DEEPSEEK_API_KEY"]:
             masked_key = API_SETTINGS["DEEPSEEK_API_KEY"][:4] + "*" * (len(API_SETTINGS["DEEPSEEK_API_KEY"]) - 8) + API_SETTINGS["DEEPSEEK_API_KEY"][-4:]
             print(f"مفتاح DeepSeek API: {masked_key}")
@@ -237,9 +188,6 @@ def init():
             print("تم تكوين إعدادات فيسبوك بنجاح.")
         else:
             print("تحذير: إعدادات فيسبوك غير مكتملة. يمكن استخدام وضع CLI فقط.")
-        
-        if APP_SETTINGS["MAINTENANCE_MODE"]:
-            print("تحذير: التطبيق في وضع الصيانة!")
     else:
         print("يوجد خطأ في الإعدادات. يرجى مراجعة ملف .env")
 

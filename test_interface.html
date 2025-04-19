@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار شات بوت مجمع عمال مصر</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <style>
+        body {
+            background-color: #f7f7f7;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .chat-container {
+            max-width: 800px;
+            margin: 30px auto;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            background-color: #fff;
+        }
+        .chat-header {
+            background-color: #0056b3;
+            color: white;
+            padding: 15px 20px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            padding: 15px;
+            background-color: #f5f5f5;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 18px;
+            max-width: 70%;
+            position: relative;
+            clear: both;
+        }
+        .user-message {
+            background-color: #0084ff;
+            color: white;
+            float: left;
+            margin-left: 10px;
+        }
+        .bot-message {
+            background-color: #eee;
+            color: #333;
+            float: right;
+            margin-right: 10px;
+        }
+        .chat-input {
+            padding: 15px;
+            background-color: #fff;
+            display: flex;
+            align-items: center;
+        }
+        .chat-input input {
+            flex: 1;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 25px;
+            outline: none;
+        }
+        .chat-input button {
+            background-color: #0056b3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 25px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        .settings-panel {
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .typing-indicator {
+            display: none;
+            padding: 10px;
+            background-color: #eee;
+            border-radius: 18px;
+            float: right;
+            margin-right: 10px;
+            margin-bottom: 15px;
+        }
+        .typing-indicator span {
+            height: 10px;
+            width: 10px;
+            float: left;
+            margin: 0 1px;
+            background-color: #9E9EA1;
+            display: block;
+            border-radius: 50%;
+            opacity: 0.4;
+        }
+        .typing-indicator span:nth-of-type(1) {
+            animation: 1s blink infinite 0.3333s;
+        }
+        .typing-indicator span:nth-of-type(2) {
+            animation: 1s blink infinite 0.6666s;
+        }
+        .typing-indicator span:nth-of-type(3) {
+            animation: 1s blink infinite 0.9999s;
+        }
+        @keyframes blink {
+            50% { opacity: 1; }
+        }
+        .logo {
+            max-height: 50px;
+            margin-left: 10px;
+        }
+        .system-message {
+            text-align: center;
+            margin: 10px 0;
+            font-size: 0.85em;
+            color: #666;
+        }
+        pre {
+            direction: ltr;
+            text-align: left;
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            overflow-x: auto;
+        }
+        .connection-status {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 12px;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .status-connected {
+            background-color: #28a745;
+        }
+        .status-disconnected {
+            background-color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-10">
+                <div class="settings-panel mt-4">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <h2 class="mb-3">إعدادات الاختبار</h2>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" id="useLocalData" checked>
+                                <label class="form-check-label" for="useLocalData">استخدام البيانات المحلية</label>
+                            </div>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" id="personalizeResponse" checked>
+                                <label class="form-check-label" for="personalizeResponse">تخصيص الرد</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="userCategory" class="form-label">فئة المستخدم</label>
+                                <select class="form-select" id="userCategory">
+                                    <option value="">غير محدد</option>
+                                    <option value="باحث عن عمل">باحث عن عمل</option>
+                                    <option value="مستثمر">مستثمر</option>
+                                    <option value="رجل أعمال">رجل أعمال</option>
+                                    <option value="صحفي">صحفي</option>
+                                    <option value="جهة تعليمية">جهة تعليمية</option>
+                                    <option value="شركة">شركة</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <button id="checkStatusBtn" class="btn btn-sm btn-secondary">التحقق من حالة الاتصال</button>
+                                <span id="connectionStatus">
+                                    <span class="status-indicator" id="statusIndicator"></span>
+                                    <span id="statusText">جارِ التحقق...</span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="chat-container">
+                    <div class="chat-header">
+                        <div class="d-flex align-items-center justify-content-center">
+                            <img src="https://www.omalmisr.com/wp-content/uploads/2022/01/cropped-WhatsApp-Image-2022-01-21-at-1.51.13-PM-1-32x32.jpeg" alt="شعار مجمع عمال مصر" class="logo">
+                            <span>شات بوت مجمع عمال مصر</span>
+                        </div>
+                    </div>
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message bot-message">
+                            أهلاً بك في صفحة مجمع عمال مصر! كيف يمكنني مساعدتك اليوم؟
+                        </div>
+                        <div class="typing-indicator" id="typingIndicator">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                    </div>
+                    <div class="chat-input">
+                        <button id="sendMessageBtn" class="ms-2">إرسال</button>
+                        <input type="text" id="userMessageInput" placeholder="اكتب رسالتك هنا..." dir="rtl">
+                    </div>
+                </div>
+                
+                <div class="alert alert-info mt-3 text-center">
+                    هذه واجهة اختبار محلية. يمكنك تجربة الشات بوت قبل رفعه على فيسبوك ماسنجر.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const chatMessages = document.getElementById('chatMessages');
+            const userMessageInput = document.getElementById('userMessageInput');
+            const sendMessageBtn = document.getElementById('sendMessageBtn');
+            const typingIndicator = document.getElementById('typingIndicator');
+            const useLocalData = document.getElementById('useLocalData');
+            const personalizeResponse = document.getElementById('personalizeResponse');
+            const userCategory = document.getElementById('userCategory');
+            const checkStatusBtn = document.getElementById('checkStatusBtn');
+            const statusIndicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+
+            // اختبار حالة الاتصال عند بدء التشغيل
+            checkConnectionStatus();
+
+            // إضافة مستمع حدث لزر حالة الاتصال
+            checkStatusBtn.addEventListener('click', checkConnectionStatus);
+
+            // Add event listener to send message when Enter key is pressed
+            userMessageInput.addEventListener('keyup', function(event) {
+                if (event.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+
+            // Add event listener to send message when button is clicked
+            sendMessageBtn.addEventListener('click', sendMessage);
+
+            // التحقق من حالة اتصال الشات بوت
+            function checkConnectionStatus() {
+                statusIndicator.className = 'status-indicator';
+                statusText.innerText = 'جارِ التحقق...';
+                
+                fetch('/api/status')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'متصل') {
+                            statusIndicator.classList.add('status-connected');
+                            statusText.innerText = 'متصل';
+                        } else {
+                            statusIndicator.classList.add('status-disconnected');
+                            statusText.innerText = 'غير متصل';
+                        }
+                    })
+                    .catch(error => {
+                        statusIndicator.classList.add('status-disconnected');
+                        statusText.innerText = 'خطأ في الاتصال';
+                        console.error('Error checking status:', error);
+                    });
+            }
+
+            function addMessage(message, isUser = false) {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('message');
+                messageDiv.classList.add(isUser ? 'user-message' : 'bot-message');
+                
+                // معالجة النص وتحويل المحتوى بتنسيق Markdown
+                const formattedMessage = formatMessage(message);
+                
+                messageDiv.innerHTML = formattedMessage;
+                
+                // Make sure typing indicator is at the bottom
+                if (typingIndicator.parentNode === chatMessages) {
+                    chatMessages.removeChild(typingIndicator);
+                }
+                
+                chatMessages.appendChild(messageDiv);
+                chatMessages.appendChild(typingIndicator);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            // تنسيق النص مع دعم الروابط وبعض تنسيقات Markdown البسيطة
+            function formatMessage(text) {
+                // تأمين النص ضد XSS
+                let safeText = text
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+                
+                // تحويل الروابط
+                safeText = safeText.replace(
+                    /(https?:\/\/[^\s]+)/g, 
+                    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+                );
+                
+                // تحويل تنسيقات النص البسيطة
+                safeText = safeText
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // **bold**
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')              // *italic*
+                
+                // تحويل أكواد البرمجة
+                safeText = safeText.replace(/```([\s\S]*?)```/g, '<pre>$1</pre>');
+                
+                // تحويل الأسطر الجديدة
+                safeText = safeText.replace(/\n/g, '<br>');
+                
+                return safeText;
+            }
+
+            function showTypingIndicator() {
+                typingIndicator.style.display = 'block';
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            function hideTypingIndicator() {
+                typingIndicator.style.display = 'none';
+            }
+
+            function addSystemMessage(message) {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('system-message');
+                messageDiv.innerText = message;
+                
+                // Make sure typing indicator is at the bottom
+                if (typingIndicator.parentNode === chatMessages) {
+                    chatMessages.removeChild(typingIndicator);
+                }
+                
+                chatMessages.appendChild(messageDiv);
+                chatMessages.appendChild(typingIndicator);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            function sendMessage() {
+                const message = userMessageInput.value.trim();
+                if (message === '') return;
+
+                // Add user message to chat
+                addMessage(message, true);
+                userMessageInput.value = '';
+
+                // Show typing indicator
+                showTypingIndicator();
+
+                // Prepare request data
+                const requestData = {
+                    message: message,
+                    use_local_data: useLocalData.checked,
+                    personalize_response: personalizeResponse.checked,
+                    user_category: userCategory.value
+                };
+
+                // Send request to backend API
+                fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Hide typing indicator
+                    hideTypingIndicator();
+                    
+                    // Add bot response to chat
+                    if (data.error) {
+                        addMessage('عذراً، حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى.');
+                        console.error('Error:', data.error);
+                    } else {
+                        addMessage(data.response);
+                    }
+                })
+                .catch(error => {
+                    // Hide typing indicator
+                    hideTypingIndicator();
+                    
+                    // Add error message to chat
+                    addMessage('عذراً، حدث خطأ في الاتصال بالخادم. يرجى التأكد من تشغيل الخادم المحلي.');
+                    console.error('Error:', error);
+                });
+            }
+        });
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -38,18 +38,13 @@ class DeepSeekAPI:
         
         logger.info(f"تم تهيئة واجهة DeepSeek API بنموذج افتراضي: {self.default_model}")
     
-    def generate_response(self, prompt: str, system_message: str = None, 
-                          user_category: str = "", context: str = None, 
-                          human_expressions: Dict = None, contact_info: Dict = None) -> str:
+    def generate_response(self, prompt: str, context: str = None, model: str = None) -> str:
         """
         توليد رد باستخدام DeepSeek API
         
         :param prompt: سؤال المستخدم
-        :param system_message: رسالة النظام (اختياري)
-        :param user_category: فئة المستخدم (اختياري)
         :param context: سياق المحادثة (اختياري)
-        :param human_expressions: تعبيرات بشرية (اختياري)
-        :param contact_info: معلومات الاتصال (اختياري)
+        :param model: اسم النموذج (اختياري)
         :return: النص المولد
         :raises: Exception في حالة وجود خطأ
         """
@@ -64,16 +59,14 @@ class DeepSeekAPI:
         messages = []
         
         # إضافة السياق كرسالة نظام إذا كان موجودًا
-        if system_message:
-            messages.append({"role": "system", "content": system_message})
-        elif context:
+        if context:
             messages.append({"role": "system", "content": context})
         
         # إضافة سؤال المستخدم
         messages.append({"role": "user", "content": prompt})
         
         payload = {
-            "model": self.default_model,
+            "model": model or self.default_model,
             "messages": messages,
             "max_tokens": self.max_tokens,
             "temperature": self.temperature
@@ -98,24 +91,28 @@ class DeepSeekAPI:
             logger.error(error_message)
             raise Exception(error_message)
     
-    def extract_response_text(self, response: Any) -> str:
+    def extract_response_text(self, response):
         """
-        استخراج النص من استجابة API
+        استخراج نص الرد من استجابة DeepSeek API
         
         :param response: الاستجابة من DeepSeek API
         :return: النص المستخرج
         """
+        # إذا كان الرد هو نص مباشر (من دالة generate_response)
         if isinstance(response, str):
             return response
-        
-        if isinstance(response, dict):
+            
+        # إذا كان الرد هو قاموس JSON (من استدعاء API مباشر)
+        elif isinstance(response, dict):
             if "choices" in response and len(response["choices"]) > 0:
-                return response["choices"][0].get("message", {}).get("content", "")
+                content = response["choices"][0].get("message", {}).get("content", "")
+                return content
             elif "error" in response:
-                logger.error(f"خطأ في استجابة API: {response['error']}")
-                return f"حدث خطأ: {response.get('error', 'خطأ غير معروف')}"
+                logger.error(f"خطأ في استجابة DeepSeek API: {response['error']}")
+                return None
         
-        return str(response)
+        # إذا لم يتم العثور على محتوى صالح
+        return None
     
     def validate_connection(self) -> Dict[str, Any]:
         """

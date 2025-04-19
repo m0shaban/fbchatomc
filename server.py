@@ -285,12 +285,66 @@ def handle_messenger_message(sender_id: str, message_data: Dict[str, Any]) -> No
             
             # إرسال رد نصي عادي
             else:
-                # تقسيم الرسائل الطويلة
-                if len(response) > 2000:
-                    parts = [response[i:i+2000] for i in range(0, len(response), 2000)]
-                    for part in parts:
+                # حد أقصى لعدد الأحرف في رسالة ماسنجر فيسبوك (استناداً على حدود منصة فيسبوك)
+                MAX_MESSAGE_LENGTH = 2000
+                
+                # تقسيم الرسائل الطويلة فقط عند تجاوز حد الأحرف المسموح به
+                if len(response) > MAX_MESSAGE_LENGTH:
+                    logger.info(f"الرسالة تجاوزت الحد الأقصى ({len(response)} حرف)، سيتم تقسيمها")
+                    
+                    # تقسيم ذكي للرسالة على أساس الفقرات والجمل لتجنب قطع الجمل
+                    message_parts = []
+                    current_part = ""
+                    
+                    # تقسيم الرسالة إلى فقرات أولاً
+                    paragraphs = response.split('\n\n')
+                    
+                    for paragraph in paragraphs:
+                        # إذا كانت الفقرة نفسها أكبر من الحد الأقصى، نقسمها إلى جمل
+                        if len(paragraph) > MAX_MESSAGE_LENGTH:
+                            sentences = paragraph.replace('\n', ' ').split('. ')
+                            for sentence in sentences:
+                                if len(current_part + sentence + '. ') <= MAX_MESSAGE_LENGTH:
+                                    current_part += sentence + '. '
+                                else:
+                                    # إذا كانت الجملة الواحدة أكبر من الحد الأقصى، نقسمها
+                                    if len(sentence) > MAX_MESSAGE_LENGTH:
+                                        sentence_chunks = [sentence[i:i+MAX_MESSAGE_LENGTH] 
+                                                          for i in range(0, len(sentence), MAX_MESSAGE_LENGTH)]
+                                        
+                                        # إضافة الجزء الحالي إذا لم يكن فارغاً
+                                        if current_part:
+                                            message_parts.append(current_part)
+                                            current_part = ""
+                                        
+                                        # إضافة أجزاء الجملة الطويلة
+                                        message_parts.extend(sentence_chunks[:-1])
+                                        current_part = sentence_chunks[-1] + '. '
+                                    else:
+                                        # حفظ الجزء الحالي وبدء جزء جديد
+                                        message_parts.append(current_part)
+                                        current_part = sentence + '. '
+                        else:
+                            # التحقق مما إذا كانت إضافة الفقرة ستتجاوز الحد الأقصى
+                            if len(current_part + '\n\n' + paragraph) <= MAX_MESSAGE_LENGTH:
+                                if current_part:
+                                    current_part += '\n\n'
+                                current_part += paragraph
+                            else:
+                                # حفظ الجزء الحالي وبدء جزء جديد
+                                message_parts.append(current_part)
+                                current_part = paragraph
+                    
+                    # إضافة الجزء الأخير إذا لم يكن فارغاً
+                    if current_part:
+                        message_parts.append(current_part)
+                    
+                    # إرسال كل جزء كرسالة منفصلة
+                    logger.info(f"تم تقسيم الرسالة إلى {len(message_parts)} أجزاء")
+                    for part in message_parts:
                         send_text_message(sender_id, part)
                 else:
+                    # إرسال الرسالة كاملة إذا كانت ضمن الحد المسموح
                     send_text_message(sender_id, response)
         
         except Exception as e:

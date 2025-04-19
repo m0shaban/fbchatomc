@@ -411,3 +411,193 @@ if __name__ == "__main__":
     except Exception as e:
         logger.critical(f"خطأ في تشغيل الواجهة المحلية: {e}")
         print(f"خطأ في تشغيل الواجهة المحلية: {e}")
+
+"""
+خادم محلي لاختبار الشات بوت قبل رفعه إلى فيسبوك ماسنجر
+يستخدم Flask لإنشاء واجهة API بسيطة تتيح للواجهة الاختبار التواصل مع الشات بوت
+"""
+
+import os
+import json
+import logging
+import datetime
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
+from bot import ChatBot
+from api import DeepSeekAPI
+from config import BOT_SETTINGS, APP_SETTINGS, setup_log_directory, setup_conversations_directory
+from api_alternatives import handle_local_response
+
+# إعداد التسجيل
+setup_log_directory()
+logging.basicConfig(
+    level=getattr(logging, APP_SETTINGS["LOG_LEVEL"]),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    filename=BOT_SETTINGS.get("LOG_FILE")
+)
+logger = logging.getLogger(__name__)
+
+# إنشاء تطبيق Flask
+app = Flask(__name__)
+CORS(app)  # للسماح بالطلبات من نفس الخادم
+
+# تهيئة الشات بوت
+chatbot = ChatBot()
+
+# إنشاء مجلد للمحادثات إذا لم يكن موجوداً
+setup_conversations_directory()
+
+@app.route('/')
+def index():
+    """صفحة الاختبار الرئيسية"""
+    return send_from_directory('.', 'test_interface.html')
+
+@app.route('/api/chat', methods=['POST'])
+def chat_api():
+    """واجهة API للمحادثة"""
+    try:
+        data = request.json
+        user_message = data.get('message', '')
+        user_id = data.get('user_id', 'local_user')
+        session_id = data.get('session_id', 'local_session')
+        
+        if not user_message:
+            return jsonify({'error': 'الرسالة مطلوبة'}), 400
+        
+        # محاولة معالجة الرسالة محلياً أولاً
+        local_response, found_locally = handle_local_response(user_message)
+        
+        if found_locally:
+            logger.info(f"تم العثور على رد محلي للرسالة: {user_message[:30]}...")
+            bot_response = local_response
+        else:
+            # استخدام الشات بوت للحصول على رد
+            bot_response = chatbot.get_response(
+                user_message=user_message,
+                user_id=user_id,
+                conversation_source="local_test"
+            )
+        
+        # حفظ المحادثة
+        save_conversation(user_message, bot_response, user_id, session_id)
+        
+        return jsonify({
+            'response': bot_response,
+            'timestamp': datetime.datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"خطأ أثناء معالجة الرسالة: {str(e)}")
+        return jsonify({
+            'error': 'حدث خطأ أثناء معالجة الرسالة',
+            'details': str(e)
+        }), 500
+
+def save_conversation(user_message, bot_response, user_id, session_id):
+    """حفظ المحادثة في ملف JSON"""
+    try:
+        if not BOT_SETTINGS.get("SAVE_CONVERSATIONS", True):
+            return
+        
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"local_chat_{timestamp}.json"
+        filepath = os.path.join(BOT_SETTINGS.get("CONVERSATIONS_DIR", "conversations"), filename)
+        
+        conversation_data = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "user_id": user_id,
+            "session_id": session_id,
+            "conversation": [
+                {
+                    "role": "user",
+                    "content": user_message,
+                    "timestamp": datetime.datetime.now().isoformat()
+                },
+                {
+                    "role": "bot",
+                    "content": bot_response,
+                    "timestamp": datetime.datetime.now().isoformat()
+                }
+            ]
+        }
+        
+        # التحقق من وجود ملف محادثة سابق للجلسة
+        session_files = []
+        if os.path.exists(BOT_SETTINGS.get("CONVERSATIONS_DIR", "conversations")):
+            for file in os.listdir(BOT_SETTINGS.get("CONVERSATIONS_DIR", "conversations")):
+                if file.startswith("local_chat_") and file.endswith(".json") and session_id in file:
+                    session_files.append(file)
+        
+        if session_files:
+            # تحديث آخر ملف محادثة للجلسة
+            latest_session_file = sorted(session_files)[-1]
+            filepath = os.path.join(BOT_SETTINGS.get("CONVERSATIONS_DIR", "conversations"), latest_session_file)
+            
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    existing_data = json.load(f)
+                
+                # إضافة الرسائل الجديدة إلى المحادثة الموجودة
+                existing_data["conversation"].extend(conversation_data["conversation"])
+                conversation_data = existing_data
+            except Exception as e:
+                logger.error(f"خطأ في قراءة ملف المحادثة السابق: {e}")
+                # استخدام البيانات الجديدة فقط في حال حدوث خطأ
+        
+        # حفظ المحادثة
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(conversation_data, f, ensure_ascii=False, indent=2)
+        
+        logger.info(f"تم حفظ المحادثة في الملف: {filepath}")
+        
+    except Exception as e:
+        logger.error(f"خطأ في حفظ المحادثة: {str(e)}")
+
+@app.route('/api/responses', methods=['GET'])
+def get_predefined_responses():
+    """الحصول على الردود المحفوظة مسبقًا من ملف البيانات"""
+    try:
+        # قراءة بيانات الأسئلة والأجوبة من ملف البيانات
+        with open(BOT_SETTINGS.get("DATA_FILE", "data.json"), 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # تحويل بيانات الأسئلة والأجوبة إلى تنسيق مناسب للواجهة
+        responses = {}
+        for prompt in data.get("prompts", []):
+            if "question" in prompt and "answer" in prompt:
+                responses[prompt["question"]] = prompt["answer"]
+        
+        return jsonify(responses)
+    
+    except Exception as e:
+        logger.error(f"خطأ في الحصول على الردود المحفوظة مسبقًا: {str(e)}")
+        return jsonify({
+            'error': 'حدث خطأ أثناء الحصول على الردود المحفوظة مسبقًا',
+            'details': str(e)
+        }), 500
+
+@app.route('/api/validate', methods=['GET'])
+def validate_api():
+    """التحقق من صحة الاتصال بـ API"""
+    try:
+        api = DeepSeekAPI()
+        status = api.validate_connection()
+        return jsonify(status)
+    except Exception as e:
+        logger.error(f"خطأ في التحقق من صلاحية API: {str(e)}")
+        return jsonify({
+            'status': 'غير متصل',
+            'error': str(e)
+        })
+
+if __name__ == "__main__":
+    # تشغيل تطبيق Flask بوضع التصحيح
+    debug_mode = APP_SETTINGS.get("DEBUG_MODE", False)
+    host = "127.0.0.1"  # استخدام localhost للاختبار المحلي
+    port = 5001  # استخدام منفذ مختلف عن المنفذ الرئيسي للتطبيق
+    
+    print(f"تشغيل واجهة اختبار الشات بوت على العنوان: http://{host}:{port}")
+    print(f"اضغط CTRL+C لإيقاف الخادم")
+    
+    # بدء تشغيل الخادم
+    app.run(host=host, port=port, debug=debug_mode)
